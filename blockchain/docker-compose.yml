@@ -1,0 +1,84 @@
+# 3-node Hyperledger Besu QBFT permissioned network for MACL.
+# Run `./setup-network.sh` first (generates keys + .env), then `docker compose up`.
+#
+# Node roles (proposal): Node-1 = implementing NGO, Node-2 = government M&E, Node-3 = donor.
+# RPC ports on the host:  Node-1 8545 | Node-2 8546 | Node-3 8547
+services:
+  node1:
+    image: hyperledger/besu:latest
+    container_name: macl-node1
+    command:
+      - --data-path=/data
+      - --genesis-file=/genesis.json
+      - --rpc-http-enabled
+      - --rpc-http-api=ETH,NET,QBFT,WEB3,ADMIN
+      - --host-allowlist=*
+      - --rpc-http-cors-origins=all
+      - --rpc-http-host=0.0.0.0
+      - --p2p-host=172.16.239.11
+      - --profile=ENTERPRISE
+    volumes:
+      - ./Node-1/data:/data
+      - ./genesis.json:/genesis.json:ro
+    ports:
+      - "8545:8545"
+    networks:
+      macl-net:
+        ipv4_address: 172.16.239.11
+
+  node2:
+    image: hyperledger/besu:latest
+    container_name: macl-node2
+    env_file: .env
+    command:
+      - --data-path=/data
+      - --genesis-file=/genesis.json
+      - --bootnodes=${BOOTNODE_ENODE}
+      - --rpc-http-enabled
+      - --rpc-http-api=ETH,NET,QBFT,WEB3,ADMIN
+      - --host-allowlist=*
+      - --rpc-http-cors-origins=all
+      - --rpc-http-host=0.0.0.0
+      - --p2p-host=172.16.239.12
+      - --profile=ENTERPRISE
+    volumes:
+      - ./Node-2/data:/data
+      - ./genesis.json:/genesis.json:ro
+    ports:
+      - "8546:8545"
+    depends_on: [node1]
+    networks:
+      macl-net:
+        ipv4_address: 172.16.239.12
+
+  node3:
+    image: hyperledger/besu:latest
+    container_name: macl-node3
+    env_file: .env
+    command:
+      - --data-path=/data
+      - --genesis-file=/genesis.json
+      - --bootnodes=${BOOTNODE_ENODE}
+      - --rpc-http-enabled
+      - --rpc-http-api=ETH,NET,QBFT,WEB3,ADMIN
+      - --host-allowlist=*
+      - --rpc-http-cors-origins=all
+      - --rpc-http-host=0.0.0.0
+      - --p2p-host=172.16.239.13
+      - --profile=ENTERPRISE
+    volumes:
+      - ./Node-3/data:/data
+      - ./genesis.json:/genesis.json:ro
+    ports:
+      - "8547:8545"
+    depends_on: [node1]
+    networks:
+      macl-net:
+        ipv4_address: 172.16.239.13
+
+networks:
+  macl-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.239.0/24

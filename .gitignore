@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# secrets / local env
+.env
+*.env.local
+
+# hardhat
+contracts/artifacts/
+contracts/cache/
+
+# besu generated network material (regenerate with setup-network.sh)
+blockchain/networkFiles/
+blockchain/Node-1/
+blockchain/Node-2/
+blockchain/Node-3/
+blockchain/genesis.json
+
+# logs / os
+*.log
+.DS_Store
