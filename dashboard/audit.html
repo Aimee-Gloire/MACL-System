@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Compliance Ledger | Audit Trail</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-fixed-dim": "#b9c7df",
+                        "primary-container": "#004b44",
+                        "secondary-container": "#d5e3fc",
+                        "surface-container-highest": "#e1e3e1",
+                        "primary-fixed": "#b1eee4",
+                        "on-primary-fixed-variant": "#095049",
+                        "inverse-on-surface": "#eff1ef",
+                        "surface-dim": "#d8dad9",
+                        "on-tertiary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#0d1c2e",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-secondary-fixed-variant": "#3a485b",
+                        "on-error": "#ffffff",
+                        "background": "#f8faf8",
+                        "on-surface-variant": "#3f4947",
+                        "outline-variant": "#bfc9c6",
+                        "primary": "#00322d",
+                        "inverse-surface": "#2e3130",
+                        "on-primary-container": "#7ebab0",
+                        "surface-bright": "#f8faf8",
+                        "surface": "#f8faf8",
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed": "#d5e3fc",
+                        "inverse-primary": "#95d2c8",
+                        "on-surface": "#191c1b",
+                        "surface-container-high": "#e7e9e7",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-fixed": "#191c1e",
+                        "surface-variant": "#e1e3e1",
+                        "primary-fixed-dim": "#95d2c8",
+                        "surface-container-low": "#f2f4f2",
+                        "on-background": "#191c1b",
+                        "on-secondary-container": "#57657a",
+                        "tertiary-fixed": "#e0e3e5",
+                        "tertiary-container": "#3f4345",
+                        "tertiary": "#292d2e",
+                        "on-error-container": "#93000a",
+                        "on-primary-fixed": "#00201c",
+                        "tertiary-fixed-dim": "#c4c7c9",
+                        "outline": "#707977",
+                        "surface-container": "#eceeec",
+                        "on-tertiary-fixed-variant": "#444749",
+                        "secondary": "#515f74",
+                        "surface-tint": "#2b6860",
+                        "on-tertiary-container": "#adafb1"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "sidebar-width": "260px",
+                        "gutter": "24px",
+                        "stack-md": "16px",
+                        "margin-desktop": "32px",
+                        "container-max": "1440px",
+                        "stack-sm": "8px",
+                        "stack-lg": "24px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "code-metadata": ["JetBrains Mono"],
+                        "display-lg": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "title-sm": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-caps": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "code-metadata": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+                        "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "title-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .ledger-line {
+            position: relative;
+        }
+        .ledger-line::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: #00322d; /* Rwanda Green */
+            opacity: 0.2;
+            z-index: 0;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .active-tab-indicator {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background-color: #00322d;
+            border-radius: 0 4px 4px 0;
+        }
+        tr.expanded-row {
+            background-color: #f2f4f2;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- Sidebar Navigation -->
+<aside class="fixed left-0 top-0 h-full w-[260px] bg-surface-container-low border-r border-outline-variant flex flex-col py-8 px-4 gap-y-stack-md z-50">
+<div class="mb-8 px-4">
+<h1 class="font-title-sm text-title-sm text-primary">MACL Ledger</h1>
+<p class="text-xs text-on-surface-variant font-code-metadata opacity-70">Permissioned · Local Node</p>
+</div>
+<nav class="flex-1 space-y-1 relative">
+<div class="absolute left-[31px] top-4 bottom-4 w-[1px] bg-outline-variant opacity-30"></div>
+<a class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all group relative rounded-lg" href="index.html">
+<span class="material-symbols-outlined z-10 bg-surface-container-low group-hover:bg-surface-container-high transition-colors">dashboard</span>
+<span class="font-body-sm text-body-sm">Overview</span>
+</a>
+<a class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all group relative rounded-lg" href="agreements.html">
+<span class="material-symbols-outlined z-10 bg-surface-container-low group-hover:bg-surface-container-high transition-colors">description</span>
+<span class="font-body-sm text-body-sm">Agreements</span>
+</a>
+<a class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all group relative rounded-lg" href="reports.html">
+<span class="material-symbols-outlined z-10 bg-surface-container-low group-hover:bg-surface-container-high transition-colors">assessment</span>
+<span class="font-body-sm text-body-sm">Reports</span>
+</a>
+<!-- Active Tab -->
+<a class="flex items-center gap-4 bg-primary-container text-on-primary-container rounded-lg px-4 py-3 font-semibold group relative" href="audit.html">
+<span class="material-symbols-outlined z-10">history_edu</span>
+<span class="font-body-sm text-body-sm">Audit Trail</span>
+</a>
+</nav>
+<div class="mt-auto space-y-1 px-2">
+<div id="macl-conn"></div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-[260px] min-h-screen">
+<!-- Top Bar -->
+<header class="w-full sticky top-0 z-40 bg-surface border-b border-outline-variant flex justify-between items-center px-margin-desktop py-4">
+<div class="flex items-center gap-stack-lg">
+<h2 class="font-headline-md text-headline-md font-bold text-primary">Compliance Ledger</h2>
+</div>
+<div class="flex items-center gap-4">
+<div id="macl-rolebar" class="flex items-center gap-2"></div>
+</div>
+</header>
+<!-- Content Canvas -->
+<div class="p-margin-desktop max-w-container-max mx-auto space-y-stack-lg">
+<!-- Page Header -->
+<div class="flex justify-between items-end">
+<div>
+<h3 class="font-display-lg text-display-lg text-on-surface">Audit Trail</h3>
+<p class="text-on-surface-variant">Immutable ledger of all compliance records and their endorsements.</p>
+</div>
+<div class="flex gap-stack-sm no-print">
+<button id="au-pdf" class="flex items-center gap-2 px-4 py-2 border border-outline text-on-surface font-label-caps hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                        EXPORT AS PDF
+                    </button>
+<button id="au-csv" class="flex items-center gap-2 px-4 py-2 border border-outline text-on-surface font-label-caps hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-[18px]">table_view</span>
+                        CSV
+                    </button>
+</div>
+</div>
+<!-- Stats Overview (Bento Style) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<div class="bg-surface-container-lowest p-6 border border-outline-variant flex flex-col gap-2">
+<span class="text-label-caps text-on-surface-variant">TOTAL RECORDS</span>
+<span class="text-headline-md font-bold text-primary" id="au-total">—</span>
+<span class="text-body-sm text-on-surface-variant">compliance reports on the ledger</span>
+</div>
+<div class="bg-surface-container-lowest p-6 border border-outline-variant flex flex-col gap-2">
+<span class="text-label-caps text-on-surface-variant">AWAITING ENDORSEMENT</span>
+<span class="text-headline-md font-bold text-secondary" id="au-pending">—</span>
+<span class="text-body-sm text-on-surface-variant">below 2-of-3 threshold</span>
+</div>
+<div class="bg-surface-container-lowest p-6 border border-outline-variant flex flex-col gap-2">
+<span class="text-label-caps text-on-surface-variant">COMPLIANCE RATE</span>
+<span class="text-headline-md font-bold text-primary" id="au-rate">—</span>
+<span class="text-body-sm text-on-surface-variant" id="au-rate-note">PASS over all reports</span>
+</div>
+</div>
+<!-- Audit Table -->
+<div class="bg-surface-container-lowest border border-outline-variant overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-low border-b border-outline-variant">
+<tr>
+<th class="px-6 py-4 font-label-caps text-on-surface-variant">AGREEMENT</th>
+<th class="px-6 py-4 font-label-caps text-on-surface-variant">TARGET</th>
+<th class="px-6 py-4 font-label-caps text-on-surface-variant">VALUE</th>
+<th class="px-6 py-4 font-label-caps text-on-surface-variant">RESULT</th>
+<th class="px-6 py-4 font-label-caps text-on-surface-variant">ENDORSEMENT</th>
+<th class="px-6 py-4 font-label-caps text-on-surface-variant">STATUS</th>
+<th class="px-6 py-4 w-10"></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant" id="au-rows">
+<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">Loading…</td></tr>
+</tbody>
+</table>
+</div>
+<!-- Count -->
+<div class="flex justify-between items-center py-4 px-2">
+<span class="text-body-sm text-on-surface-variant" id="au-count">—</span>
+</div>
+</div>
+</main>
+<!-- Footer Identity (Mini) -->
+<footer class="ml-[260px] border-t border-outline-variant p-6 bg-surface-container-low no-print">
+<div class="flex justify-between items-center opacity-50">
+<span class="text-xs font-code-metadata uppercase tracking-widest">MACL — Multi-Stakeholder Accountability &amp; Compliance Ledger</span>
+<div class="flex gap-4">
+<span class="text-xs font-code-metadata" id="au-foot-chain">CHAIN —</span>
+</div>
+</div>
+</footer>
+<!-- MACL chain wiring -->
+<script src="vendor/ethers.umd.min.js"></script>
+<script src="config.js"></script>
+<script src="js/chain.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/views/audit.js"></script>
+<script>
+        function toggleRow(rowId) {
+            const row = document.getElementById(rowId);
+            const icon = document.getElementById('icon-' + rowId);
+            const isHidden = row.classList.contains('hidden');
+            
+            // Toggle visibility
+            if (isHidden) {
+                row.classList.remove('hidden');
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                row.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+    </script>
+</body></html>

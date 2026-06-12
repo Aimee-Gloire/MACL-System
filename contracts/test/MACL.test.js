@@ -76,4 +76,43 @@ describe("MACL end-to-end", () => {
     await verification.connect(ngo).endorse(1);
     await expect(verification.connect(ngo).endorse(1)).to.be.revertedWith("already endorsed");
   });
+
+  it("Verification: records a 3rd endorsement after 2-of-3 finalisation (full audit trail)", async () => {
+    await setupFinalisedAgreement(500, 9_000_000_000);
+    await compliance.connect(ngo).submitReport(1, 0, 600);
+    await verification.connect(ngo).endorse(1);
+    await verification.connect(ministry).endorse(1); // 2-of-3 -> finalised
+    expect(await verification.isFinalised(1)).to.equal(true);
+
+    // The third distinct party may still endorse; state stays finalised.
+    await verification.connect(donor).endorse(1);
+    expect(await verification.endorsementCount(1)).to.equal(3);
+    expect(await verification.isFinalised(1)).to.equal(true);
+  });
+
+  it("Verification: a party can decline (dispute) a record", async () => {
+    await setupFinalisedAgreement(500, 9_000_000_000);
+    await compliance.connect(ngo).submitReport(1, 0, 400); // FAIL
+    await verification.connect(ngo).decline(1);
+    expect(await verification.declineCount(1)).to.equal(1);
+    expect(await verification.hasDeclined(1, ngo.address)).to.equal(true);
+    expect(await verification.isFinalised(1)).to.equal(false);
+  });
+
+  it("Verification: a party cannot both endorse and decline the same record", async () => {
+    await setupFinalisedAgreement(500, 9_000_000_000);
+    await compliance.connect(ngo).submitReport(1, 0, 600);
+    await verification.connect(ngo).endorse(1);
+    await expect(verification.connect(ngo).decline(1)).to.be.revertedWith("already endorsed");
+    await verification.connect(ministry).decline(1);
+    await expect(verification.connect(ministry).endorse(1)).to.be.revertedWith("already declined");
+  });
+
+  it("Verification: cannot decline a record that has already finalised", async () => {
+    await setupFinalisedAgreement(500, 9_000_000_000);
+    await compliance.connect(ngo).submitReport(1, 0, 600);
+    await verification.connect(ngo).endorse(1);
+    await verification.connect(ministry).endorse(1); // finalised
+    await expect(verification.connect(donor).decline(1)).to.be.revertedWith("already finalised");
+  });
 });

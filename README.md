@@ -1,146 +1,88 @@
 # MACL — Multi-Stakeholder Accountability and Compliance Ledger
 
-A permissioned-blockchain accountability layer for NGO programme compliance in Rwanda. MACL lets an implementing NGO, a government M&E unit, and a donor share one tamper-resistant record of programme agreements and results, where compliance is evaluated automatically by smart contracts and no single party can finalise a record alone.
+MACL is a permissioned-blockchain system that lets an NGO, a government M&E unit, and a donor share **one** tamper-resistant record of a development programme. Agreements and their targets live on-chain, reported results are evaluated automatically, and a result is final only after a 2-of-3 multi-party sign-off — so no single party controls the record. (BSc Software Engineering capstone — Initial Software Demo / MVP.)
 
-**Capstone:** BSc Software Engineering, African Leadership University · **Author:** Aimee Gloire Imaragahinda · **Supervisor:** Dr Aaron A. Izang
-**Assignment:** Initial Software Demo (MVP)
+## Problem
 
-> **GitHub repo:** _add your repository URL here after pushing_ → `https://github.com/<your-username>/macl`
+In multi-stakeholder NGO programmes the master record usually sits in one organisation's database. That party can alter history before an audit, compliance is judged manually and inconsistently, and verification depends on infrequent audits of records the audited party itself controls. No other party can independently trust the records between audits.
 
----
+## Mission
 
-## What this MVP demonstrates
+Replace single-custodian trust with a shared, rule-based ledger: encode commitments as immutable agreements, evaluate compliance automatically and identically for everyone, and require multi-party endorsement before any result is finalised.
 
-1. **Distributed custody** — three Hyperledger Besu validators (QBFT consensus) hold identical copies of the ledger. Block finality needs a 2-of-3 supermajority, so no single node can rewrite history.
-2. **Automated compliance** — a reported value is evaluated on-chain against the agreed target → `PASS` / `FAIL` / `FLAG`, with no human discretion.
-3. **Multi-party verification** — a result is only finalised after two of the three organisations endorse it.
+## Application area
 
----
+NGO programme accountability in Rwanda. The three stakeholders are the implementing **NGO**, a **government M&E** unit, and a **donor**. Scope is programme-level records — agreements, targets, reported results. It does not handle payments or personal data, and runs on synthetic data for the demo.
 
-## Requirements → features (traceability)
+## Features
 
-The three structural problems from the proposal map directly to implemented features:
+- **Immutable agreements** — a donor encodes an agreement + measurable targets and locks it; terms can't change afterward.
+- **Automatic compliance** — a reported value is evaluated on-chain against the target → **PASS / FAIL / FLAG**, with no human discretion.
+- **Multi-party verification** — a record finalises only after **2 of 3** organisations endorse it; any party can instead **decline** (dispute) a record. The finalised record stores the ledger block hash.
+- **Role dashboard** — a browser UI with a role switcher (Donor-Admin / NGO / Government-Audit); each role signs with its own account and only operates the controls it is allowed to.
+- **Audit trail** — searchable record history with endorsements and declines, exportable to CSV / PDF.
 
-| Problem (proposal §1.2) | MVP feature | Where |
-|---|---|---|
-| Centralised records can be altered without detection | 3-node QBFT ledger; identical copies; 2-of-3 finality | `blockchain/` |
-| Compliance evaluated manually & inconsistently | On-chain threshold evaluation → PASS/FAIL/FLAG | `ComplianceEvaluationContract.sol` |
-| Verification depends on infrequent audits of self-held records | Multi-party endorsement before finalisation; queryable audit trail | `VerificationWorkflowContract.sol` |
+## Architecture
 
-**Functional requirements covered:** encode agreement + targets · submit a report · auto-evaluate against threshold · collect endorsements · finalise at 2-of-3 · query ledger / audit trail.
-**Non-functional:** tamper-resistance, multi-party trust, non-technical browser UI, open-source toolchain, runs on a single laptop.
+Two tiers, with no API in between:
 
-## Tools & why they were chosen
+- **Contracts (the backend)** — three wired Solidity contracts hold all state and rules:
+  - `AgreementContract` — agreements + targets; locks on finalise.
+  - `ComplianceEvaluationContract` — records reported values, auto-evaluates PASS/FAIL/FLAG.
+  - `VerificationWorkflowContract` — endorsements/declines; finalises at 2-of-3 and stamps the block hash.
+  - Deploy order: Agreement → Compliance(agreementAddr) → Verification(complianceAddr) → setVerificationContract.
+- **Dashboard (presentation)** — plain HTML/CSS/JS + ethers.js in the browser, talking straight to the deployed contracts.
 
-| Layer | Tool | Why |
-|---|---|---|
-| Blockchain | **Hyperledger Besu** (QBFT) | Enterprise permissioned chain; QBFT is the Besu-recommended BFT consensus; identity-based, no tokens/gas economics |
-| Contracts | **Solidity 0.8.x** | EVM standard; prior coursework experience carries over |
-| Contract tooling | **Hardhat** | Fast local EVM for the dev loop; compile, test, deploy to Besu |
-| Contract↔chain | **ethers.js 6** | Standard JSON-RPC client used by both deploy scripts and the API |
-| API | **Node.js 20 + Express** | Lightweight REST layer between the browser and the chain |
-| Frontend | **React 18** | Component-based role dashboards for non-technical users |
-| Orchestration | **Docker Compose** | Runs the 3 validators as isolated containers on one machine |
-| Baseline | **PostgreSQL 16** | Centralised comparison for the tamper-resistance evaluation |
-| Analysis | **Python 3.12** (pandas, matplotlib) | Charts the evaluation metrics |
+Development and the demo run on a local **Hardhat** node; the production target is a 3-node **Hyperledger Besu (QBFT)** permissioned network running the same contracts.
 
-Everything is open-source; the project runs entirely on local hardware (Apple M4). See `MACL-Proposal-Reference.md` for full scope.
+## Tools
 
----
+Solidity 0.8.24 · Hardhat 2 · ethers.js v6 · Node.js 20 · plain HTML/CSS/JS · Hyperledger Besu + Docker (production target)·
 
-## Repository structure
+## Run the demo
 
-```
-macl/
-├── blockchain/      # 3-node Besu QBFT network (config, compose, scripts)
-├── contracts/       # Hardhat project: 3 Solidity contracts + tests + deploy
-├── api/             # Express + ethers.js REST API            (next phase)
-├── dashboard/       # React app, 3 role views                 (next phase)
-├── baseline/        # PostgreSQL schema + tamper scripts       (eval phase)
-└── docs/            # architecture, ERD, mockups, screenshots
-```
+Three terminals, from the repo root.
 
-The three smart contracts:
-
-- **AgreementContract** — lifecycle of programme agreements + measurable targets.
-- **ComplianceEvaluationContract** — records reported values and auto-evaluates them (PASS/FAIL/FLAG).
-- **VerificationWorkflowContract** — collects endorsements; finalises at the 2-of-3 threshold and stamps the ledger block hash.
-
----
-
-## Set up the environment
-
-**Prerequisites:** Node.js 20 LTS, Docker Desktop, Git. (Besu itself runs via Docker — no separate install needed.)
-
-### 1. Contracts (Hardhat dev loop)
+**1 — Start the chain**
 
 ```bash
-cd contracts
-npm install
-cp .env.example .env
-npm test          # runs the full MACL contract test suite on Hardhat's in-memory EVM
+cd contracts && npm install && npx hardhat node      # JSON-RPC at http://127.0.0.1:8545
 ```
 
-### 2. Blockchain (3-node Besu QBFT network)
+**2 — Deploy + wire the contracts** (new terminal)
 
 ```bash
-cd ../blockchain
-./setup-network.sh        # generates genesis + 3 validator keys, writes .env
-docker compose up         # starts Node-1 (8545), Node-2 (8546), Node-3 (8547)
+cd contracts && npm run deploy:local
 ```
 
-In another terminal, confirm consensus and that all three nodes agree:
+Addresses are deterministic on a fresh node and already match `dashboard/config.js`. Restart the node → redeploy.
+
+**3 — Serve the dashboard** (new terminal)
 
 ```bash
-./check-network.sh        # prints the 3 validators + matching block heights
+npx http-server . -p 8080 -c-1
 ```
 
-### 3. Deploy the contracts to the live network
+Open **<http://localhost:8080/dashboard/>** — the connection light should read `connected · block #N`. (Needs internet for the Tailwind/font CDNs; all chain data stays local.)
+
+**Tests**, anytime:
 
 ```bash
-cd ../contracts
-npm run deploy:besu       # deploys all 3 contracts to the Besu network and wires them
+cd contracts && npm test       # 10 passing
 ```
 
-Save the printed contract addresses — the API/dashboard read them from `.env`.
+**Optional — 3-node Besu QBFT network**
 
-> **Next phases (`api/`, `dashboard/`)** are built in the following work session; see `MACL-Hands-On-Setup-Walkthrough.md`.
+```bash
+cd blockchain && ./setup-network.sh && docker compose up
+cd ../contracts && npm run deploy:besu
+```
 
----
+## Interacting with the contracts
 
-## Designs
+- **Via the dashboard (normal path):** pick a role (top-right) and act — Donor-Admin creates and finalises agreements, NGO submits reports, all three endorse or decline. Typical flow: create + lock a target (`beneficiaries_reached ≥ 1000`) → as NGO submit a value (≥ on time = PASS, < threshold = FAIL, ≥ but late = FLAG) → endorse from two roles → the record finalises with a block hash, or decline to dispute it.
+- **Directly (optional):** `cd contracts && npx hardhat console --network localhost`, then use ethers to call the contracts at the addresses above.
 
-See `docs/`:
+## Conclusion
 
-- `architecture.md` / architecture diagram — the 3-tier system (blockchain / API / presentation).
-- ERD — the five entities (Organisation, ProgrammeAgreement, ProgrammeTarget, ComplianceRecord, Endorsement).
-- Dashboard mockups (Figma) and app screenshots — _added once the dashboard is built._
-
----
-
-## Security measures
-
-- **Consensus integrity** — QBFT BFT consensus; 2-of-3 supermajority required to finalise a block, so a single compromised node cannot rewrite the ledger. (With 3 validators the network tolerates 0 Byzantine faults by the `3f+1` rule; the proof-of-concept demonstrates distributed custody, and ≥4 validators is the production path.)
-- **Permissioned access** — identity-based validator set fixed in the genesis file; membership changes require on-chain QBFT voting, not config edits.
-- **Authorisation in contracts** — only an agreement's creator can edit/finalise it; only the wired verification contract can mark a record finalised; an organisation cannot endorse the same record twice.
-- **Tamper evidence** — every finalised record stores the ledger block hash, linking application data to immutable chain state.
-- **API (next phase)** — JWT sessions; the API signs transactions per identified user; all persistent state lives on-chain (stateless API).
-
----
-
-## Deployment plan
-
-- **Now (MVP / demo):** everything local on the Apple M4 — 3 Besu validators as Docker containers on a private bridge network, Hardhat for the contract dev loop, synthetic data only.
-- **Defence (optional):** one cloud-hosted demo node + a demo domain (~51,000 RWF, proposal §1.7) only if a public URL is needed; the same Docker Compose file deploys unchanged.
-- **Production path (out of scope):** ≥4 validators across real organisations, a full data-protection review under Rwanda Law No. 058/2021, and read-only DHIS2 import.
-
----
-
-## Status
-
-- [x] Three smart contracts written and compiling (solc 0.8.24, 0 warnings)
-- [x] Hardhat test suite (agreement lifecycle, PASS/FAIL/FLAG evaluation, 2-of-3 finalisation)
-- [x] 3-node Besu QBFT network config + Docker Compose + helper scripts
-- [ ] REST API (Express + ethers.js)
-- [ ] React dashboard (NGO / Audit / Donor-Admin views) + ledger visualisation
-- [ ] PostgreSQL baseline + tamper-resistance evaluation
+MACL shows that distributed, rule-based verification can replace single-custodian trust in NGO programme accountability: the contracts make agreements immutable, evaluate compliance identically for every party, and require multi-party agreement to finalise — all driven from a dashboard usable by non-technical staff. Out of scope for this MVP and left as next steps: the live 3-node Besu deployment, an optional REST API, and a tamper-resistance evaluation against a centralised baseline.

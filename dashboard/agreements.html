@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Compliance Ledger - Programme Agreements</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-fixed-dim": "#b9c7df",
+                        "primary-container": "#004b44",
+                        "secondary-container": "#d5e3fc",
+                        "surface-container-highest": "#e1e3e1",
+                        "primary-fixed": "#b1eee4",
+                        "on-primary-fixed-variant": "#095049",
+                        "inverse-on-surface": "#eff1ef",
+                        "surface-dim": "#d8dad9",
+                        "on-tertiary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#0d1c2e",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-secondary-fixed-variant": "#3a485b",
+                        "on-error": "#ffffff",
+                        "background": "#f8faf8",
+                        "on-surface-variant": "#3f4947",
+                        "outline-variant": "#bfc9c6",
+                        "primary": "#00322d",
+                        "inverse-surface": "#2e3130",
+                        "on-primary-container": "#7ebab0",
+                        "surface-bright": "#f8faf8",
+                        "surface": "#f8faf8",
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed": "#d5e3fc",
+                        "inverse-primary": "#95d2c8",
+                        "on-surface": "#191c1b",
+                        "surface-container-high": "#e7e9e7",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-fixed": "#191c1e",
+                        "surface-variant": "#e1e3e1",
+                        "primary-fixed-dim": "#95d2c8",
+                        "surface-container-low": "#f2f4f2",
+                        "on-background": "#191c1b",
+                        "on-secondary-container": "#57657a",
+                        "tertiary-fixed": "#e0e3e5",
+                        "tertiary-container": "#3f4345",
+                        "tertiary": "#292d2e",
+                        "on-error-container": "#93000a",
+                        "on-primary-fixed": "#00201c",
+                        "tertiary-fixed-dim": "#c4c7c9",
+                        "outline": "#707977",
+                        "surface-container": "#eceeec",
+                        "on-tertiary-fixed-variant": "#444749",
+                        "secondary": "#515f74",
+                        "surface-tint": "#2b6860",
+                        "on-tertiary-container": "#adafb1"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "sidebar-width": "260px",
+                        "gutter": "24px",
+                        "stack-md": "16px",
+                        "margin-desktop": "32px",
+                        "container-max": "1440px",
+                        "stack-sm": "8px",
+                        "stack-lg": "24px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "code-metadata": ["JetBrains Mono"],
+                        "display-lg": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "title-sm": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-caps": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "code-metadata": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+                        "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "title-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .ledger-stroke { position: relative; }
+        .ledger-stroke::before {
+            content: '';
+            position: absolute;
+            left: -12px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: #2b6860;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #bfc9c6; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md selection:bg-primary-fixed-dim selection:text-on-primary-fixed">
+<!-- Sidebar Navigation -->
+<aside class="fixed left-0 top-0 h-full w-[260px] bg-surface-container-low border-r border-outline-variant flex flex-col py-8 px-4 gap-y-stack-md z-50">
+<div class="flex flex-col gap-2 mb-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-primary flex items-center justify-center rounded">
+<span class="material-symbols-outlined text-on-primary">verified_user</span>
+</div>
+<div>
+<h2 class="font-title-sm text-title-sm text-primary">MACL Ledger</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Permissioned · Local Node</p>
+</div>
+</div>
+</div>
+<nav class="flex flex-col gap-1">
+<a href="index.html" class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-sm text-body-sm">Overview</span>
+</a>
+<a href="agreements.html" class="flex items-center gap-4 bg-primary-container text-on-primary-container rounded-lg px-4 py-3 font-semibold cursor-pointer">
+<span class="material-symbols-outlined">description</span>
+<span class="font-body-sm text-body-sm">Agreements</span>
+</a>
+<a href="reports.html" class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">assessment</span>
+<span class="font-body-sm text-body-sm">Reports</span>
+</a>
+<a href="audit.html" class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">history_edu</span>
+<span class="font-body-sm text-body-sm">Audit Trail</span>
+</a>
+</nav>
+<div class="mt-auto flex flex-col gap-1 pt-6 border-t border-outline-variant px-2">
+<div id="macl-conn"></div>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-[260px] min-h-screen">
+<!-- Top Navigation Anchor -->
+<header class="w-full sticky top-0 z-40 bg-surface border-b border-outline-variant px-margin-desktop py-4 flex justify-between items-center max-w-container-max mx-auto">
+<div class="flex items-center gap-4">
+<h1 class="font-headline-md text-headline-md font-bold text-primary">Compliance Ledger</h1>
+<div class="h-6 w-px bg-outline-variant mx-2"></div>
+<span class="font-body-md text-body-md text-primary border-b-2 border-primary font-bold cursor-pointer">Agreements</span>
+</div>
+<div class="flex items-center gap-4">
+<div id="macl-rolebar" class="flex items-center gap-2"></div>
+</div>
+</header>
+<!-- Dynamic Content Area -->
+<div class="p-margin-desktop max-w-container-max mx-auto">
+<div class="flex justify-between items-end mb-8">
+<div>
+<h2 class="font-display-lg text-display-lg text-primary">Programme Agreements</h2>
+<p class="text-on-surface-variant mt-2 max-w-2xl">Encode programme agreements and their measurable targets, then lock them on-chain. Acting as <span id="ag-acting" class="font-semibold text-primary">…</span>.</p>
+</div>
+<button data-perm="agreement.create" class="bg-primary text-white font-semibold px-6 py-3 rounded flex items-center gap-2 hover:bg-opacity-90 active:scale-95 transition-all" onclick="document.getElementById('agreement-modal').classList.remove('hidden')">
+<span class="material-symbols-outlined">add</span>
+                    Create New Agreement
+                </button>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-gutter">
+<!-- Main Agreements List (Left/Center Column) -->
+<div class="col-span-12 lg:col-span-8 space-y-4">
+<div class="bg-surface-container-lowest border border-outline-variant p-1">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low">
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">AGREEMENT</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">CREATOR</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">PERIOD</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">TARGETS</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">STATUS</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">ACTION</th>
+</tr>
+</thead>
+<tbody id="ag-rows">
+<tr><td class="p-4 text-sm text-on-surface-variant" colspan="6">Loading…</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Summary Statistics / Ledger Metadata (Right Column) -->
+<div class="col-span-12 lg:col-span-4 space-y-gutter">
+<div class="bg-primary text-white p-6 rounded-lg relative overflow-hidden">
+<div class="relative z-10">
+<h3 class="font-title-sm text-title-sm mb-4">Agreement Statistics</h3>
+<div class="space-y-4">
+<div class="flex justify-between items-center border-b border-white/20 pb-2">
+<span class="text-sm opacity-80">Total Agreements</span>
+<span class="font-code-metadata" id="ag-stat-total">—</span>
+</div>
+<div class="flex justify-between items-center border-b border-white/20 pb-2">
+<span class="text-sm opacity-80">Drafts (pending finalisation)</span>
+<span class="font-code-metadata" id="ag-stat-draft">—</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-sm opacity-80">Finalised &amp; locked</span>
+<span class="font-code-metadata" id="ag-stat-final">—</span>
+</div>
+</div>
+</div>
+<div class="absolute -right-4 -bottom-4 opacity-10">
+<span class="material-symbols-outlined text-[120px]" style="font-variation-settings: 'FILL' 1;">shield</span>
+</div>
+</div>
+<div class="bg-surface-container border border-outline-variant p-6 rounded-lg">
+<h3 class="font-title-sm text-title-sm text-primary mb-4">Audit Ledger</h3>
+<div class="space-y-6" id="ag-ledger">
+<p class="text-xs text-on-surface-variant">Loading…</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Create New Agreement Modal / Form Overlay -->
+<div class="fixed inset-0 z-[100] hidden" id="agreement-modal">
+<div class="absolute inset-0 bg-primary/40 backdrop-blur-sm" onclick="document.getElementById('agreement-modal').classList.add('hidden')"></div>
+<div class="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl animate-slide-left flex flex-col">
+<div class="p-8 border-b border-outline-variant flex justify-between items-center">
+<div>
+<h2 class="font-headline-md text-headline-md text-primary">New Programme Agreement</h2>
+<p class="text-on-surface-variant text-sm">Define the programme window, signatories, and measurable targets.</p>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-error transition-colors" onclick="document.getElementById('agreement-modal').classList.add('hidden')">close</button>
+</div>
+<div class="flex-1 overflow-y-auto p-8 custom-scrollbar">
+<form class="space-y-8" id="agreement-form">
+<!-- General Information -->
+<div class="grid grid-cols-2 gap-gutter">
+<div class="col-span-2">
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">SIGNATORIES (parties to the agreement)</label>
+<div id="ag-signatories" class="flex flex-col gap-2 bg-surface-container-low border border-outline-variant rounded p-3"></div>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">START DATE</label>
+<input id="ag-start" class="w-full border border-outline-variant rounded p-3 bg-surface-container-low focus:ring-2 focus:ring-primary outline-none transition-all" type="date"/>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">END DATE</label>
+<input id="ag-end" class="w-full border border-outline-variant rounded p-3 bg-surface-container-low focus:ring-2 focus:ring-primary outline-none transition-all" type="date"/>
+</div>
+</div>
+<!-- Repeatable Targets Section -->
+<div>
+<div class="flex justify-between items-center mb-4">
+<label class="font-label-caps text-label-caps text-on-surface-variant">PERFORMANCE TARGETS</label>
+<button data-perm="agreement.addTarget" class="text-primary text-sm font-semibold flex items-center gap-1 hover:underline" onclick="addTargetRow()" type="button">
+<span class="material-symbols-outlined text-sm">add_circle</span>
+                                Add Another Target
+                            </button>
+</div>
+<div class="space-y-4" id="targets-container">
+<!-- Target Item -->
+<div class="p-4 border border-outline-variant bg-surface-container-low rounded-lg relative target-row">
+<div class="grid grid-cols-2 gap-4">
+<div class="col-span-2">
+<label class="block text-xs font-semibold mb-1">Indicator Name</label>
+<input data-field="indicator" class="w-full border-none bg-white rounded p-2 text-sm focus:ring-1 focus:ring-primary outline-none" placeholder="e.g. beneficiaries_reached" type="text"/>
+</div>
+<div>
+<label class="block text-xs font-semibold mb-1">Threshold (whole number)</label>
+<input data-field="threshold" class="w-full border-none bg-white rounded p-2 text-sm focus:ring-1 focus:ring-primary outline-none" placeholder="1000" type="number" min="0" step="1"/>
+</div>
+<div>
+<label class="block text-xs font-semibold mb-1">Unit</label>
+<input data-field="unit" list="ag-units" class="w-full border-none bg-white rounded p-2 text-sm focus:ring-1 focus:ring-primary outline-none" placeholder="people"/>
+</div>
+<div class="col-span-2">
+<label class="block text-xs font-semibold mb-1">Deadline</label>
+<input data-field="deadline" class="w-full border-none bg-white rounded p-2 text-sm focus:ring-1 focus:ring-primary outline-none" type="date"/>
+</div>
+</div>
+</div>
+<datalist id="ag-units"></datalist>
+</div>
+</div>
+</form>
+</div>
+<div class="p-8 border-t border-outline-variant bg-surface-container-low flex gap-4">
+<button type="button" id="ag-create" data-perm="agreement.create" class="flex-1 bg-primary text-white font-semibold py-4 rounded hover:bg-opacity-90 active:scale-95 transition-all">CREATE AGREEMENT</button>
+<button type="button" class="flex-1 border-2 border-primary text-primary font-semibold py-4 rounded hover:bg-primary hover:text-white active:scale-95 transition-all" onclick="document.getElementById('agreement-modal').classList.add('hidden')">CANCEL</button>
+</div>
+</div>
+</div>
+<script>
+        function addTargetRow() {
+            const container = document.getElementById('targets-container');
+            const newRow = container.querySelector('.target-row').cloneNode(true);
+            const inputs = newRow.querySelectorAll('input');
+            inputs.forEach(input => input.value = '');
+            
+            // Add delete button if not exists
+            if (!newRow.querySelector('.delete-target')) {
+                const deleteBtn = document.createElement('button');
+                deleteBtn.type = "button";
+                deleteBtn.className = "delete-target absolute top-2 right-2 text-error/40 hover:text-error";
+                deleteBtn.innerHTML = '<span class="material-symbols-outlined text-lg">delete</span>';
+                deleteBtn.onclick = function() { newRow.remove(); };
+                newRow.appendChild(deleteBtn);
+            }
+            
+            container.appendChild(newRow);
+        }
+
+        // Simple animation for the side panel
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slide-left {
+                from { transform: translateX(100%); }
+                to { transform: translateX(0); }
+            }
+            .animate-slide-left {
+                animation: slide-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+<!-- MACL chain wiring -->
+<script src="vendor/ethers.umd.min.js"></script>
+<script src="config.js"></script>
+<script src="js/chain.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/views/agreements.js"></script>
+</body></html>
