@@ -21,6 +21,18 @@
         "comment": "Local-only deployer test account. NEVER use on a public network.",
         "privateKey": "8f2a55949038a9610f50fb23b5883af3b4ecb3c3bb792cbcefbd1542c692be63",
         "balance": "0xad78ebc5ac6200000"
+      },
+      "f39fd6e51aad88f6f4ce6ab8827279cfffb92266": {
+        "comment": "Dashboard Donor-Admin role (well-known Hardhat test account). Local-only.",
+        "balance": "0xad78ebc5ac6200000"
+      },
+      "70997970c51812dc3a010c7d01b50e0d17dc79c8": {
+        "comment": "Dashboard NGO role (well-known Hardhat test account). Local-only.",
+        "balance": "0xad78ebc5ac6200000"
+      },
+      "3c44cdddb6a900fa2b585dd299e03d12fa4293bc": {
+        "comment": "Dashboard Audit role (well-known Hardhat test account). Local-only.",
+        "balance": "0xad78ebc5ac6200000"
       }
     }
   },

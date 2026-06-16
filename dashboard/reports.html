@@ -152,6 +152,10 @@
 <span class="material-symbols-outlined">description</span>
 <span class="font-body-sm text-body-sm">Agreements</span>
 </a>
+<a class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all rounded-lg" href="spend.html">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-body-sm text-body-sm">Budget &amp; Spend</span>
+</a>
 <a class="flex items-center gap-4 bg-primary-container text-on-primary-container rounded-lg px-4 py-3 font-semibold" href="reports.html">
 <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">assessment</span>
 <span class="font-body-sm text-body-sm">Reports</span>
@@ -210,6 +214,11 @@
 <input class="w-full bg-surface-container-low border border-outline-variant rounded-lg p-3 text-body-md pr-12 focus:ring-primary focus:border-primary transition-all" id="value" placeholder="e.g. 1200" type="number" min="0" step="1"/>
 <span class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant opacity-50 material-symbols-outlined">data_object</span>
 </div>
+</div>
+<div class="space-y-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Supporting evidence (optional, hashed locally)</label>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-body-sm file:mr-3 file:rounded file:border-0 file:bg-primary-container file:text-white file:px-3 file:py-1.5 file:text-xs file:font-semibold" id="rp-file" type="file"/>
+<p class="text-xs font-code-metadata text-on-surface-variant mt-1 break-all" id="rp-filehash">Optional — the file is hashed in your browser; only the SHA-256 fingerprint is stored.</p>
 </div>
 <div class="pt-4">
 <button data-perm="report.submit" class="w-full bg-primary text-white py-4 rounded-lg font-title-sm hover:bg-primary-container transition-all flex items-center justify-center gap-2" type="submit">
@@ -278,11 +287,12 @@
 <th class="px-6 py-4 text-left font-label-caps text-label-caps text-on-surface-variant uppercase border-b border-outline-variant">Metric / Target</th>
 <th class="px-6 py-4 text-left font-label-caps text-label-caps text-on-surface-variant uppercase border-b border-outline-variant">Result</th>
 <th class="px-6 py-4 text-left font-label-caps text-label-caps text-on-surface-variant uppercase border-b border-outline-variant">Endorsements</th>
+<th class="px-6 py-4 text-left font-label-caps text-label-caps text-on-surface-variant uppercase border-b border-outline-variant">Evidence</th>
 <th class="px-6 py-4 text-right font-label-caps text-label-caps text-on-surface-variant uppercase border-b border-outline-variant">Date</th>
 </tr>
 </thead>
 <tbody id="rp-rows">
-<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="6">Loading…</td></tr>
+<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">Loading…</td></tr>
 </tbody>
 </table>
 </div>

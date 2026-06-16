@@ -97,6 +97,13 @@ contract VerificationWorkflowContract {
         require(!hasEndorsedSpend[requestId][msg.sender], "already endorsed");
         require(!hasDeclinedSpend[requestId][msg.sender], "already declined");
 
+        // No self-approval: the organisation that raised the request cannot
+        // approve its own spend — approvals must come from distinct OTHER orgs.
+        // (In the 3-org network this means BOTH other parties must endorse.)
+        ComplianceEvaluationContract.SpendRequest memory s =
+            complianceContract.getSpendRequest(requestId);
+        require(msg.sender != s.requester, "submitter cannot approve own request");
+
         hasEndorsedSpend[requestId][msg.sender] = true;
         uint256 count = ++spendEndorsementCount[requestId];
         emit SpendEndorsed(requestId, msg.sender, count);

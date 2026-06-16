@@ -25,6 +25,9 @@ MACL_UI.ready(async () => {
         if (await verification.hasEndorsed(BigInt(r.rec.id), meta.address)) r.endorsers.push(meta);
         else if (await verification.hasDeclined(BigInt(r.rec.id), meta.address)) r.decliners.push(meta);
       }
+      // Integrity badge: the SAME verifyRecord() the spend page uses. It returns a
+      // `nodes` field left null today; Part 4 fills it with the cross-node check.
+      r.integrity = await MACL.verifyRecord({ kind: "record", id: r.rec.id });
     }
 
     const pass = rows.filter((r) => MACL.fmtResult(r.rec.result) === "PASS").length;
@@ -49,6 +52,14 @@ MACL_UI.ready(async () => {
                 FLAG: "bg-amber-100 text-amber-800", PENDING: "bg-surface-container-high text-on-surface-variant" }[label];
     return `<span class="px-2 py-1 ${c} text-[10px] font-bold rounded">${label}</span>`;
   };
+  // Integrity badge — driven by MACL.verifyRecord (extensible to a cross-node
+  // check in Part 4). Shown on finalised records.
+  const integrityBadge = (integ) => {
+    if (!integ || !integ.ok) {
+      return `<span class="inline-flex items-center gap-1 text-[10px] text-error mt-1" title="${MACL.esc(integ ? integ.detail : "unverifiable")}"><span class="material-symbols-outlined text-xs">error</span>${MACL.esc(integ ? integ.label : "Unverifiable")}</span>`;
+    }
+    return `<span class="inline-flex items-center gap-1 text-[10px] text-primary mt-1" title="${MACL.esc(integ.detail)}"><span class="material-symbols-outlined text-xs">verified</span>${MACL.esc(integ.label)}</span>`;
+  };
 
   function renderTable() {
     const body = document.getElementById("au-rows");
@@ -71,7 +82,7 @@ MACL_UI.ready(async () => {
       // status + actions
       let status, action = "";
       if (r.rec.finalised) {
-        status = `<span class="flex items-center gap-1.5 text-xs text-primary font-bold"><span class="material-symbols-outlined text-sm">lock</span>Finalised</span>`;
+        status = `<div class="flex flex-col"><span class="flex items-center gap-1.5 text-xs text-primary font-bold"><span class="material-symbols-outlined text-sm">lock</span>Finalised</span>${integrityBadge(r.integrity)}</div>`;
       } else if (declines > 0) {
         status = `<span class="flex items-center gap-1.5 text-xs text-error font-bold"><span class="material-symbols-outlined text-sm">warning</span>Disputed (${declines})</span>`;
       } else {
@@ -121,6 +132,16 @@ ${endorserList}${declinerList}
 <span class="text-[10px] text-on-surface-variant block mb-1">FINALISED BLOCK HASH</span>
 <div class="font-code-metadata text-[11px] break-all text-on-surface">${r.rec.finalised ? MACL.esc(r.blockHash) : "— (not finalised)"}</div>
 </div>
+${MACL.hasHash(r.rec.documentHash) ? `<div class="bg-surface-container-lowest p-4 border border-outline-variant rounded">
+<span class="text-[10px] text-on-surface-variant block mb-1">SUPPORTING-DOCUMENT FINGERPRINT (SHA-256)</span>
+<div class="font-code-metadata text-[11px] break-all text-on-surface">${MACL.esc(r.rec.documentHash)}</div>
+<div class="mt-3 flex flex-wrap items-center gap-2">
+<label class="text-xs text-on-surface-variant">Verify a file against this:</label>
+<input type="file" data-verifyrec="${id}" onclick="event.stopPropagation()" class="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary-container file:text-white file:px-2 file:py-1 file:text-[11px]"/>
+<span class="text-xs font-semibold" id="verifyrec-out-${id}"></span>
+</div>
+<p class="text-[10px] text-on-surface-variant mt-2">A match proves the document is unchanged since it was recorded — not that it was genuine in the first place.</p>
+</div>` : ""}
 <div class="grid grid-cols-2 gap-4">
 <div><span class="text-[10px] text-on-surface-variant block mb-1">SUBMITTER</span><span class="text-xs font-bold text-on-surface">${MACL.esc(MACL.labelForAddress(r.rec.submitter))}</span></div>
 <div><span class="text-[10px] text-on-surface-variant block mb-1">CONSENSUS MODEL</span><span class="text-xs font-bold text-on-surface">QBFT · 2-of-3 endorse</span></div>
@@ -138,6 +159,24 @@ ${endorserList}${declinerList}
       b.onclick = (e) => { e.stopPropagation(); act("endorse", b.getAttribute("data-endorse")); });
     body.querySelectorAll("button[data-decline]").forEach((b) =>
       b.onclick = (e) => { e.stopPropagation(); act("decline", b.getAttribute("data-decline")); });
+
+    // wire the "Verify document" file inputs (records carrying a documentHash)
+    body.querySelectorAll("input[data-verifyrec]").forEach((inp) =>
+      inp.onchange = async (e) => {
+        e.stopPropagation();
+        const rid = inp.getAttribute("data-verifyrec");
+        const out = document.getElementById("verifyrec-out-" + rid);
+        const row = rows.find((r) => r.rec.id.toString() === rid);
+        const file = inp.files[0];
+        if (!file || !row) return;
+        out.textContent = "Checking…"; out.className = "text-xs font-semibold text-on-surface-variant";
+        try {
+          const v = await MACL.verifyDocument(file, row.rec.documentHash);
+          // Honest framing (decision C): unchanged-since-recorded, not authenticity.
+          if (v.match) { out.textContent = "✓ Document verified"; out.title = "Unchanged since recorded — not a proof of authenticity."; out.className = "text-xs font-semibold text-green-700"; }
+          else { out.textContent = "✗ Does not match the ledger"; out.className = "text-xs font-semibold text-error"; }
+        } catch (err) { out.textContent = MACL.parseError(err); out.className = "text-xs font-semibold text-error"; }
+      });
   }
 
   async function act(kind, id) {

@@ -120,6 +120,13 @@ window.MACL = (function () {
     if (!h || /^0x0{64}$/.test(h)) return "—";
     return `${h.slice(0, 10)}…${h.slice(-6)}`;
   }
+  // A documentHash of all-zeros means "no evidence attached".
+  function hasHash(h) { return !!h && !/^0x0{64}$/.test(h); }
+  // Format a money figure with thousands separators + the configured unit (e.g. "1,000,000 RWF").
+  function fmtMoney(v) {
+    try { return `${BigInt(v).toLocaleString("en-US")} ${cfg.MONEY_UNIT}`; }
+    catch (_) { return `${v} ${cfg.MONEY_UNIT}`; }
+  }
   function esc(s) {
     return String(s ?? "").replace(/[&<>"']/g, (c) => (
       { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
@@ -198,9 +205,33 @@ window.MACL = (function () {
       const count = await agreement.targetCount(id);
       const targets = [];
       for (let i = 0n; i < count; i++) targets.push(await agreement.getTarget(id, i));
-      rows.push({ id: idStr, a, targets, finalised: a.finalised });
+      // Budget figures live on the agreement struct; remaining = budget - committedSpend.
+      const budget = a.budget;
+      const committed = a.committedSpend;
+      const remaining = budget - committed;
+      rows.push({ id: idStr, a, targets, finalised: a.finalised, budget, committed, remaining });
     }
     rows.sort((x, y) => Number(y.id) - Number(x.id));
+    return rows;
+  }
+
+  // Every spend request (+ its 2-of-3 endorsement/decline state, and whether
+  // `forAddr` has endorsed/declined). Shared by the Budget & Spend page.
+  async function fetchSpendRequests(forAddr) {
+    const { compliance, verification } = contracts();
+    const logs = await getLogs(compliance, "SpendRequested");
+    const ids = [...new Set(logs.map((l) => l.args.requestId.toString()))];
+    const rows = [];
+    for (const idStr of ids) {
+      const id = BigInt(idStr);
+      const req = await compliance.getSpendRequest(id);
+      const count = await verification.spendEndorsementCount(id);
+      const declines = await verification.spendDeclineCount(id);
+      const endorsedByActing = forAddr ? await verification.hasEndorsedSpend(id, forAddr) : false;
+      const declinedByActing = forAddr ? await verification.hasDeclinedSpend(id, forAddr) : false;
+      rows.push({ req, count, declines, endorsedByActing, declinedByActing });
+    }
+    rows.sort((a, b) => Number(b.req.id) - Number(a.req.id));
     return rows;
   }
 
@@ -227,13 +258,80 @@ window.MACL = (function () {
     return rows;
   }
 
+  // -------------------------------------------------- receipt fingerprints (SHA-256)
+  // Compute the SHA-256 of a file ENTIRELY IN THE BROWSER and return it as a
+  // bytes32 hex string. The file's bytes never leave the user's machine — only
+  // this 32-byte fingerprint is ever sent on-chain. (crypto.subtle needs a
+  // secure context; 127.0.0.1/localhost both qualify.)
+  async function hashFile(file) {
+    const buf = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest("SHA-256", buf);
+    return "0x" + [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  // Re-hash a file the user re-selects and compare it to the hash stored on-chain.
+  // Returns { match, computed, expected }. Used by the "Verify document" controls.
+  async function verifyDocument(file, onChainHash) {
+    const computed = await hashFile(file);
+    return {
+      match: computed.toLowerCase() === String(onChainHash || "").toLowerCase(),
+      computed,
+      expected: onChainHash,
+    };
+  }
+
+  // -------------------------------------------------- record integrity (extensible)
+  // ONE place the integrity badge calls. Today it confirms the record/request
+  // really exists on the ledger and is locked (finalised/approved), and reports
+  // whether it carries a document fingerprint. It returns a `nodes` field left
+  // null for now: in Part 4 the SAME function will additionally query every Besu
+  // node in cfg.NODES and fill `nodes` with the cross-node agreement — the badge
+  // needs no change.
+  //   ref = { kind: "spend" | "record", id }
+  async function verifyRecord(ref) {
+    const { compliance } = contracts();
+    try {
+      if (ref.kind === "spend") {
+        const r = await compliance.getSpendRequest(BigInt(ref.id));
+        if (r.id === 0n) return { ok: false, label: "Not on ledger", detail: "No such spend request.", nodes: null };
+        return {
+          ok: true,
+          locked: r.approved,
+          documentHash: r.documentHash,
+          hasDocument: hasHash(r.documentHash),
+          label: r.approved ? "On ledger · approved" : "On ledger · pending",
+          detail: r.approved
+            ? "Approved 2-of-3 and recorded immutably on the ledger."
+            : "Recorded on the ledger; awaiting 2-of-3 approval.",
+          nodes: null, // Part 4: cross-node comparison fills this in
+        };
+      }
+      const rec = await compliance.getRecord(BigInt(ref.id));
+      if (rec.id === 0n) return { ok: false, label: "Not on ledger", detail: "No such record.", nodes: null };
+      return {
+        ok: true,
+        locked: rec.finalised,
+        documentHash: rec.documentHash,
+        hasDocument: hasHash(rec.documentHash),
+        label: rec.finalised ? "On ledger · finalised" : "On ledger · pending",
+        detail: rec.finalised
+          ? "Finalised 2-of-3 and recorded immutably on the ledger."
+          : "Recorded on the ledger; awaiting 2-of-3 endorsement.",
+        nodes: null,
+      };
+    } catch (err) {
+      return { ok: false, label: "Unverifiable", detail: parseError(err), nodes: null };
+    }
+  }
+
   return {
     provider, cfg,
     loadAbis, contracts, signerFor,
     getRole, setRole, roleMeta, can,
     ping, getChainId, verifyDeployed,
-    shortAddr, labelForAddress, fmtResult, fmtTs, toUnix, fmtHash, esc,
+    shortAddr, labelForAddress, fmtResult, fmtTs, toUnix, fmtHash, hasHash, fmtMoney, esc,
     toast, parseError, withTx, getLogs,
-    fetchAgreements, fetchRecords,
+    fetchAgreements, fetchRecords, fetchSpendRequests,
+    hashFile, verifyDocument, verifyRecord,
   };
 })();

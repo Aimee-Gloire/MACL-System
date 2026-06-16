@@ -149,8 +149,12 @@ window.MACL_UI = (function () {
     "agreement.addTarget": "Only the Donor-Admin can add targets.",
     "agreement.finalise":  "Only the Donor-Admin can finalise (lock) agreements.",
     "report.submit":       "Only the NGO can submit reports.",
+    "budget.set":          "Only the Donor-Admin can set an agreement's budget.",
+    "spend.request":       "Only the NGO can raise a spend request.",
     "record.endorse":      "This role cannot endorse records.",
     "record.decline":      "This role cannot decline records.",
+    "spend.endorse":       "This role cannot approve spend requests.",
+    "spend.decline":       "This role cannot decline spend requests.",
   };
 
   function injectPermStyles() {

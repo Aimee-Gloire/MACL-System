@@ -8,6 +8,22 @@ MACL_UI.ready(async () => {
   document.getElementById("rp-breadcrumb").textContent = MACL.roleMeta(acting).label + " Console";
 
   let finalised = []; // finalised agreements with targets, for the cascade
+  let pendingHash = null; // SHA-256 of an optional evidence file, computed in-browser
+
+  // Hash any attached evidence file locally; only its fingerprint is ever sent.
+  const fileInput = document.getElementById("rp-file");
+  if (fileInput) {
+    fileInput.addEventListener("change", async (e) => {
+      const out = document.getElementById("rp-filehash");
+      const file = e.target.files[0];
+      if (!file) { pendingHash = null; out.textContent = "Optional — no file selected."; return; }
+      out.textContent = "Hashing locally…";
+      try {
+        pendingHash = await MACL.hashFile(file);
+        out.innerHTML = `SHA-256 (stays in browser): <span class="text-primary">${pendingHash}</span>`;
+      } catch (err) { pendingHash = null; out.textContent = "Could not hash file: " + MACL.parseError(err); }
+    });
+  }
 
   // --- populate agreement select (finalised only)
   async function loadSelects() {
@@ -60,21 +76,49 @@ MACL_UI.ready(async () => {
     const mine = MACL.roleMeta().address.toLowerCase();
     const rows = (await MACL.fetchRecords()).filter((r) => r.rec.submitter.toLowerCase() === mine);
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="6">No reports submitted by ${MACL.esc(MACL.roleMeta().label)} yet.</td></tr>`;
+      tbody.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">No reports submitted by ${MACL.esc(MACL.roleMeta().label)} yet.</td></tr>`;
       return;
     }
     const pillClass = { PASS: "status-pill-pass", FAIL: "status-pill-fail", FLAG: "status-pill-flag", PENDING: "" };
     tbody.innerHTML = rows.map((r) => {
       const label = MACL.fmtResult(r.rec.result);
+      const id = r.rec.id.toString();
+      // Evidence cell: if a fingerprint is stored, offer to re-verify a file against it.
+      const evidence = MACL.hasHash(r.rec.documentHash)
+        ? `<div class="flex flex-col gap-1">
+<span class="font-code-metadata text-[11px] text-on-surface-variant" title="${MACL.esc(r.rec.documentHash)}">${MACL.fmtHash(r.rec.documentHash)}</span>
+<label class="text-[10px] text-primary cursor-pointer hover:underline">Verify file<input type="file" data-verify="${id}" class="hidden"/></label>
+<span class="text-[10px] font-semibold" id="rp-verify-${id}"></span>
+</div>`
+        : `<span class="text-xs text-on-surface-variant">—</span>`;
       return `<tr class="hover:bg-surface-container-low transition-colors">
-<td class="px-6 py-5 border-b border-outline-variant font-code-metadata text-xs text-primary">#${r.rec.id}</td>
+<td class="px-6 py-5 border-b border-outline-variant font-code-metadata text-xs text-primary">#${id}</td>
 <td class="px-6 py-5 border-b border-outline-variant font-body-sm">Agreement #${r.rec.agreementId}</td>
 <td class="px-6 py-5 border-b border-outline-variant font-body-sm">${MACL.esc(r.target.indicator)}: ${r.rec.reportedValue} ${MACL.esc(r.target.unit)}</td>
 <td class="px-6 py-5 border-b border-outline-variant"><span class="${pillClass[label]} px-3 py-1 rounded-full text-[10px] font-bold">${label}</span></td>
 <td class="px-6 py-5 border-b border-outline-variant"><div class="flex items-center gap-1 text-on-surface-variant"><span class="material-symbols-outlined text-sm" style="font-variation-settings:'FILL' 1;">star</span><span class="font-body-sm">${r.count}/${MACL.cfg.ENDORSEMENT_THRESHOLD}</span></div></td>
+<td class="px-6 py-5 border-b border-outline-variant">${evidence}</td>
 <td class="px-6 py-5 border-b border-outline-variant text-right text-body-sm text-on-surface-variant">${MACL.fmtTs(r.rec.evaluatedAt).slice(0, 16)}</td>
 </tr>`;
     }).join("");
+
+    // wire the per-row "Verify file" controls
+    tbody.querySelectorAll("input[data-verify]").forEach((inp) =>
+      inp.onchange = async () => {
+        const id = inp.getAttribute("data-verify");
+        const out = document.getElementById("rp-verify-" + id);
+        const row = rows.find((r) => r.rec.id.toString() === id);
+        const file = inp.files[0];
+        if (!file || !row) return;
+        out.textContent = "Checking…"; out.className = "text-[10px] font-semibold text-on-surface-variant";
+        try {
+          const v = await MACL.verifyDocument(file, row.rec.documentHash);
+          // Honest framing (decision C): a match only proves the file is unchanged
+          // since it was recorded, not that it was genuine in the first place.
+          if (v.match) { out.textContent = "✓ Document verified"; out.title = "Unchanged since recorded — not a proof of authenticity."; out.className = "text-[10px] font-semibold text-green-700"; }
+          else { out.textContent = "✗ Does not match the ledger"; out.className = "text-[10px] font-semibold text-error"; }
+        } catch (err) { out.textContent = MACL.parseError(err); out.className = "text-[10px] font-semibold text-error"; }
+      });
   }
 
   // --- submit
@@ -89,8 +133,18 @@ MACL_UI.ready(async () => {
 
     const { compliance } = MACL.contracts(MACL.getRole());
     let receipt;
-    try { receipt = await MACL.withTx("Submit report", () => compliance.submitReport(BigInt(id), BigInt(idx), BigInt(val))); }
-    catch (_) { return; }
+    try {
+      receipt = await MACL.withTx("Submit report", () =>
+        // Use the documentHash overload only when evidence was attached; otherwise
+        // call the plain 3-arg version (which stores a zero hash).
+        pendingHash
+          ? compliance["submitReport(uint256,uint256,uint256,bytes32)"](BigInt(id), BigInt(idx), BigInt(val), pendingHash)
+          : compliance.submitReport(BigInt(id), BigInt(idx), BigInt(val)));
+    } catch (_) { return; }
+    pendingHash = null;
+    if (fileInput) fileInput.value = "";
+    const fh = document.getElementById("rp-filehash");
+    if (fh) fh.textContent = "Optional — no file selected.";
 
     // read the on-chain evaluation from the RecordEvaluated event
     let result = null, recordId = null;

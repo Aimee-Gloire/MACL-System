@@ -5,7 +5,7 @@
 # RPC ports on the host:  Node-1 8545 | Node-2 8546 | Node-3 8547
 services:
   node1:
-    image: hyperledger/besu:latest
+    image: hyperledger/besu:24.12.2
     container_name: macl-node1
     command:
       - --data-path=/data
@@ -27,7 +27,7 @@ services:
         ipv4_address: 172.16.239.11
 
   node2:
-    image: hyperledger/besu:latest
+    image: hyperledger/besu:24.12.2
     container_name: macl-node2
     env_file: .env
     command:
@@ -52,7 +52,7 @@ services:
         ipv4_address: 172.16.239.12
 
   node3:
-    image: hyperledger/besu:latest
+    image: hyperledger/besu:24.12.2
     container_name: macl-node3
     env_file: .env
     command:

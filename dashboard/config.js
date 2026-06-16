@@ -8,18 +8,61 @@
  * Loaded as a plain <script> (no modules/bundler), so it just attaches
  * a single global object: window.MACL_CONFIG.
  */
-window.MACL_CONFIG = {
-  // JSON-RPC endpoint of the chain the browser talks to directly.
-  RPC_URL: "http://127.0.0.1:8545",
+window.MACL_CONFIG = (function () {
+  // --- network toggle -----------------------------------------------------
+  // Flip this ONE value to point the whole dashboard at a different chain:
+  //   "local" — the single Hardhat node (dev/demo default)
+  //   "besu"  — the real 3-node Hyperledger Besu QBFT network (see RUN-BESU.md)
+  // Everything else (ABIs, roles, permissions) is identical across networks.
+  const NETWORK = "besu"; // "local" | "besu"
 
-  // Deterministic addresses produced by `npm run deploy:local` on a
-  // fresh Hardhat node (see CLAUDE.md). If you redeploy onto a node
-  // that is NOT fresh, update these three values.
-  ADDRESSES: {
-    Agreement:    "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-    Compliance:   "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-    Verification: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-  },
+  // Per-network RPC endpoint + deployed contract addresses. Both sets are the
+  // DETERMINISTIC addresses you get from a fresh deploy in declaration order
+  // (Agreement → Compliance → Verification). They differ between networks only
+  // because the deployer account differs (Hardhat acct #0 vs the Besu genesis
+  // deployer 0xfe3b…). If you deploy onto a chain that is NOT fresh, paste the
+  // addresses printed by the deploy script over the matching set below.
+  const NETWORKS = {
+    local: {
+      RPC_URL: "http://127.0.0.1:8545",
+      ADDRESSES: {
+        Agreement:    "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+        Compliance:   "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+        Verification: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+      },
+    },
+    besu: {
+      // Node-1's RPC. The browser only needs ONE node to read/write; the other
+      // two are listed in NODES below for the Part 4 cross-node integrity panel.
+      RPC_URL: "http://127.0.0.1:8545",
+      ADDRESSES: {
+        Agreement:    "0x42699A7612A82f1d9C36148af9C77354759b210b",
+        Compliance:   "0xa50a51c09a5c451C52BB714527E1974b686D8e77",
+        Verification: "0x9a3DBCa554e9f6b9257aAa24010DA8377C57c17e",
+      },
+    },
+  };
+
+  // The three Besu validator RPC endpoints (host ports from blockchain/docker-compose.yml).
+  // Used later by the Part 4 panel that compares each node's view of the ledger.
+  const NODES = [
+    { label: "Node-1 (NGO)",      url: "http://127.0.0.1:8545" },
+    { label: "Node-2 (Ministry)", url: "http://127.0.0.1:8546" },
+    { label: "Node-3 (Donor)",    url: "http://127.0.0.1:8547" },
+  ];
+
+  const active = NETWORKS[NETWORK];
+
+  return {
+  // Which network is live, and the resolved endpoint/addresses for it.
+  NETWORK,
+  NODES,
+
+  // JSON-RPC endpoint of the chain the browser talks to directly.
+  RPC_URL: active.RPC_URL,
+
+  // The deployed contract addresses for the active network.
+  ADDRESSES: active.ADDRESSES,
 
   // Where to fetch each contract's ABI. These paths are served by a
   // static server running from the REPO ROOT (macl/), so the browser
@@ -70,12 +113,15 @@ window.MACL_CONFIG = {
   // given write control. This is the ONE place to edit if the rules change.
   //
   //   agreement.create / addTarget / finalise  -> Donor-Admin only
+  //   budget.set                               -> Donor-Admin only
   //   report.submit                            -> NGO only
+  //   spend.request                            -> NGO only (raises a spend request)
   //   record.endorse / record.decline          -> all three (the 2-of-3)
+  //   spend.endorse  / spend.decline           -> all three (the 2-of-3 approval)
   PERMISSIONS: {
-    donor: ["agreement.create", "agreement.addTarget", "agreement.finalise", "record.endorse", "record.decline"],
-    ngo:   ["report.submit", "record.endorse", "record.decline"],
-    audit: ["record.endorse", "record.decline"],
+    donor: ["agreement.create", "agreement.addTarget", "agreement.finalise", "budget.set", "record.endorse", "record.decline", "spend.endorse", "spend.decline"],
+    ngo:   ["report.submit", "spend.request", "record.endorse", "record.decline", "spend.endorse", "spend.decline"],
+    audit: ["record.endorse", "record.decline", "spend.endorse", "spend.decline"],
   },
 
   // How denied controls are presented:
@@ -99,4 +145,10 @@ window.MACL_CONFIG = {
   // these are just convenience options — note there is NO money/USD,
   // MACL does not handle financial value).
   UNIT_OPTIONS: ["people", "percent", "count", "litres", "households"],
-};
+
+  // The money unit budgets and spend requests are recorded in. MACL never
+  // moves or holds money on-chain — this is just a label for the recorded
+  // figures (the actual funds move through normal banking, off-chain).
+  MONEY_UNIT: "RWF",
+  };
+})();

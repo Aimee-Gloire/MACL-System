@@ -191,11 +191,24 @@ describe("MACL end-to-end", () => {
     );
   });
 
-  it("Spend: documentHash (receipt fingerprint) is stored and retrievable", async () => {
+  it("Spend: documentHash (supporting-document fingerprint) is stored and retrievable", async () => {
     await setupFinalisedAgreementWithBudget(500, 9_000_000_000, 1_000_000);
     await compliance.connect(ngo).createSpendRequest(1, 400_000, "buy school supplies", DOC_HASH);
     const s = await compliance.getSpendRequest(1);
     expect(s.documentHash).to.equal(DOC_HASH);
+  });
+
+  it("Spend: the submitter cannot approve its own request (no self-approval)", async () => {
+    await setupFinalisedAgreementWithBudget(500, 9_000_000_000, 1_000_000);
+    // ngo raises the request, so ngo is the submitter.
+    await compliance.connect(ngo).createSpendRequest(1, 400_000, "buy school supplies", DOC_HASH);
+    await expect(verification.connect(ngo).endorseSpend(1)).to.be.revertedWith(
+      "submitter cannot approve own request"
+    );
+    // The two OTHER organisations must both endorse to reach 2-of-3.
+    await verification.connect(donor).endorseSpend(1);
+    await verification.connect(ministry).endorseSpend(1);
+    expect(await verification.isSpendApproved(1)).to.equal(true);
   });
 
   it("Report: an optional documentHash can be attached and read back", async () => {
