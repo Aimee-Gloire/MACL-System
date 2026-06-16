@@ -28,6 +28,11 @@ async function main() {
   await tx.wait();
   console.log("Wired ComplianceEvaluation -> Verification");
 
+  // Wire agreement -> compliance so only the compliance contract can commit spend against a budget.
+  const tx2 = await agreement.setComplianceContract(complianceAddr);
+  await tx2.wait();
+  console.log("Wired Agreement -> Compliance (spend commits)");
+
   console.log("\nDeployment complete. Save these addresses for the API/.env:");
   console.log(
     JSON.stringify(

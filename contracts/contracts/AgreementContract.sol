@@ -16,20 +16,28 @@ contract AgreementContract {
 
     struct Agreement {
         uint256 id;
-        address creator;    // the donor org that encodes the agreement
+        address creator;        // the donor org that encodes the agreement
         uint256 startDate;
         uint256 endDate;
         address[] signatories;
         bool finalised;
+        uint256 budget;         // total money committed to this programme (e.g. RWF). Money never moves on-chain.
+        uint256 committedSpend; // sum of all spend requests already APPROVED 2-of-3 against this budget
     }
 
     uint256 private nextAgreementId = 1;
     mapping(uint256 => Agreement) private agreements;
     mapping(uint256 => Target[]) private agreementTargets;
 
+    // The Compliance contract is the only address allowed to commit spend against a budget.
+    // Wired once after deployment (Agreement is deployed first, so it cannot know the address up front).
+    address public complianceContract;
+
     event AgreementCreated(uint256 indexed id, address indexed creator);
     event TargetAdded(uint256 indexed agreementId, string indicator, uint256 threshold);
     event AgreementFinalised(uint256 indexed id);
+    event BudgetSet(uint256 indexed agreementId, uint256 budget);
+    event SpendCommitted(uint256 indexed agreementId, uint256 amount, uint256 committedSpend);
 
     /// @notice Encode a new programme agreement (donor action).
     function createAgreement(
@@ -62,6 +70,45 @@ contract AgreementContract {
         require(msg.sender == a.creator, "only creator");
         agreementTargets[agreementId].push(Target(indicator, threshold, unit, deadline));
         emit TargetAdded(agreementId, indicator, threshold);
+    }
+
+    /// @notice Set (or update) the programme budget for an agreement before it is finalised.
+    /// @dev Donor-only, and only while the agreement is still editable. The budget is just a
+    ///      recorded figure (no real money is moved or held on-chain); spend requests are later
+    ///      checked and approved against it.
+    function setBudget(uint256 agreementId, uint256 budget) external {
+        Agreement storage a = agreements[agreementId];
+        require(a.id != 0, "no such agreement");
+        require(!a.finalised, "agreement finalised");
+        require(msg.sender == a.creator, "only creator");
+        a.budget = budget;
+        emit BudgetSet(agreementId, budget);
+    }
+
+    /// @notice How much of the budget is still available (budget minus everything already approved).
+    function remainingBudget(uint256 agreementId) public view returns (uint256) {
+        Agreement storage a = agreements[agreementId];
+        require(a.id != 0, "no such agreement");
+        return a.budget - a.committedSpend; // committedSpend can never exceed budget (see commitSpend)
+    }
+
+    /// @notice Record that an approved spend request has been committed against the budget.
+    /// @dev Called ONLY by the Compliance contract, the moment a spend request reaches the
+    ///      2-of-3 approval threshold. Reverts if it would overspend the budget, so an approval
+    ///      can never push committedSpend past budget.
+    function commitSpend(uint256 agreementId, uint256 amount) external {
+        require(msg.sender == complianceContract, "only compliance contract");
+        Agreement storage a = agreements[agreementId];
+        require(a.id != 0, "no such agreement");
+        require(amount <= a.budget - a.committedSpend, "exceeds remaining budget");
+        a.committedSpend += amount;
+        emit SpendCommitted(agreementId, amount, a.committedSpend);
+    }
+
+    /// @notice Wire the Compliance contract address once, after deployment.
+    function setComplianceContract(address c) external {
+        require(complianceContract == address(0), "already set");
+        complianceContract = c;
     }
 
     /// @notice Lock the agreement so terms can no longer change.
