@@ -17,8 +17,9 @@ contract ComplianceEvaluationContract {
         Result result;
         uint256 evaluatedAt;
         address submitter;
-        bool finalised;        // set by the Verification Workflow Contract
+        bool finalised;        // set by the Verification Workflow Contract at 2-of-3
         bytes32 documentHash;  // optional fingerprint of an off-chain evidence file (0 = none)
+        bool unverified;       // BL-9: terminal state if 2-of-3 isn't reached within the verification window
     }
 
     /// @notice A request to spend money against an agreement's budget.
@@ -33,12 +34,26 @@ contract ComplianceEvaluationContract {
         address requester;     // the participant (NGO) who raised it
         uint256 createdAt;
         bool approved;         // true once 2-of-3 endorse it (set by the Verification contract); then locked
+        // --- post-approval settlement (BL-7): the money moves off-chain through normal banking;
+        //     the requester then pins the ACTUAL receipt's fingerprint so the spend is closed out. ---
+        bool spent;            // true once the requester records the real receipt
+        bytes32 receiptHash;   // SHA-256 of the off-chain receipt (the file stays off-chain)
+        uint256 spentAt;       // when the receipt was recorded (0 until spent)
     }
 
     AgreementContract public immutable agreementContract;
 
+    // The deployer, recorded at construction. Only the owner may wire the Verification contract,
+    // so the one-time wiring step can't be front-run by a rogue address on a live network.
+    address public immutable owner;
+
     uint256 private nextRecordId = 1;
     mapping(uint256 => ComplianceRecord) private records;
+
+    // BL-8: how many reported records for an agreement evaluated to FAIL. A record's
+    // result is immutable once set, so this only grows. Used to FLAG (not block)
+    // spend on a programme that is failing its targets — see hasFailingRecords.
+    mapping(uint256 => uint256) public failingRecordCount;
 
     uint256 private nextSpendRequestId = 1;
     mapping(uint256 => SpendRequest) private spendRequests;
@@ -47,9 +62,12 @@ contract ComplianceEvaluationContract {
     event RecordEvaluated(uint256 indexed recordId, Result result, uint256 reportedValue);
     event SpendRequested(uint256 indexed requestId, uint256 indexed agreementId, uint256 amount, address indexed requester);
     event SpendApproved(uint256 indexed requestId, uint256 indexed agreementId, uint256 amount);
+    event SpendMarkedSpent(uint256 indexed requestId, uint256 indexed agreementId, bytes32 receiptHash);
+    event RecordMarkedUnverified(uint256 indexed recordId);
 
     constructor(address agreementContractAddress) {
         agreementContract = AgreementContract(agreementContractAddress);
+        owner = msg.sender;
     }
 
     /// @notice Submit a reported value against a target; evaluation runs automatically.
@@ -82,6 +100,7 @@ contract ComplianceEvaluationContract {
         uint256 reportedValue,
         bytes32 documentHash
     ) internal returns (uint256 recordId) {
+        require(agreementContract.isOrgType(msg.sender, AgreementContract.OrgType.NGO), "only NGO org");
         require(agreementContract.isFinalised(agreementId), "agreement not finalised");
         require(targetIndex < agreementContract.targetCount(agreementId), "bad target index");
 
@@ -105,8 +124,13 @@ contract ComplianceEvaluationContract {
             evaluatedAt: block.timestamp,
             submitter: msg.sender,
             finalised: false,
-            documentHash: documentHash
+            documentHash: documentHash,
+            unverified: false
         });
+
+        if (r == Result.FAIL) {
+            failingRecordCount[agreementId] += 1;
+        }
 
         emit RecordSubmitted(recordId, agreementId, msg.sender);
         emit RecordEvaluated(recordId, r, reportedValue);
@@ -118,6 +142,15 @@ contract ComplianceEvaluationContract {
 
     function recordExists(uint256 recordId) external view returns (bool) {
         return records[recordId].id != 0;
+    }
+
+    /// @notice True if the agreement has at least one FAILing compliance record.
+    /// @dev BL-8: spend is deliberately NOT blocked by compliance status (the 2-of-3
+    ///      approval already governs each spend, and funds may be needed to remediate a
+    ///      failing programme). This view lets the dashboard FLAG approvers that the
+    ///      programme is failing its targets, so the decoupling is informed, not blind.
+    function hasFailingRecords(uint256 agreementId) external view returns (bool) {
+        return failingRecordCount[agreementId] > 0;
     }
 
     // --- spend requests against the agreement budget ---
@@ -134,6 +167,7 @@ contract ComplianceEvaluationContract {
         string calldata purpose,
         bytes32 documentHash
     ) external returns (uint256 requestId) {
+        require(agreementContract.isOrgType(msg.sender, AgreementContract.OrgType.NGO), "only NGO org");
         require(agreementContract.isFinalised(agreementId), "agreement not finalised");
         require(amount > 0, "amount must be > 0");
         require(amount <= agreementContract.remainingBudget(agreementId), "exceeds remaining budget");
@@ -147,7 +181,10 @@ contract ComplianceEvaluationContract {
             documentHash: documentHash,
             requester: msg.sender,
             createdAt: block.timestamp,
-            approved: false
+            approved: false,
+            spent: false,
+            receiptHash: bytes32(0),
+            spentAt: 0
         });
 
         emit SpendRequested(requestId, agreementId, amount, msg.sender);
@@ -175,6 +212,25 @@ contract ComplianceEvaluationContract {
         emit SpendApproved(requestId, s.agreementId, s.amount);
     }
 
+    /// @notice Close out an APPROVED spend request by pinning the actual receipt's fingerprint.
+    /// @dev BL-7: this is the requester's own settlement action (the org that raised and then
+    ///      actually spent the funds off-chain), not a governance step — the 2-of-3 approval that
+    ///      authorised the spend has already happened. Moves a request request → approved → spent.
+    ///      Only the receipt's SHA-256 hash goes on-chain; the receipt file stays off-chain.
+    /// @param receiptHash SHA-256 of the off-chain receipt (must be non-zero).
+    function markSpent(uint256 requestId, bytes32 receiptHash) external {
+        SpendRequest storage s = spendRequests[requestId];
+        require(s.id != 0, "no such spend request");
+        require(s.approved, "not approved");
+        require(msg.sender == s.requester, "only requester");
+        require(!s.spent, "already spent");
+        require(receiptHash != bytes32(0), "receipt hash required");
+        s.spent = true;
+        s.receiptHash = receiptHash;
+        s.spentAt = block.timestamp;
+        emit SpendMarkedSpent(requestId, s.agreementId, receiptHash);
+    }
+
     /// @notice Marks a record finalised. Restricted to the verification contract.
     function markFinalised(uint256 recordId) external {
         require(msg.sender == verificationContract, "only verification contract");
@@ -182,10 +238,23 @@ contract ComplianceEvaluationContract {
         records[recordId].finalised = true;
     }
 
+    /// @notice Marks a record UNVERIFIED (BL-9 terminal state). Restricted to the verification
+    /// @dev    contract, which only calls this after its verification window has passed without
+    ///         the record reaching 2-of-3. A finalised record can never be marked unverified.
+    function markUnverified(uint256 recordId) external {
+        require(msg.sender == verificationContract, "only verification contract");
+        require(records[recordId].id != 0, "no such record");
+        require(!records[recordId].finalised, "already finalised");
+        records[recordId].unverified = true;
+        emit RecordMarkedUnverified(recordId);
+    }
+
     // --- wiring to the Verification Workflow Contract (set once) ---
     address public verificationContract;
 
+    /// @notice Wire the Verification contract address once, after deployment (owner only).
     function setVerificationContract(address v) external {
+        require(msg.sender == owner, "only owner");
         require(verificationContract == address(0), "already set");
         verificationContract = v;
     }

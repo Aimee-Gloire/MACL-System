@@ -14,6 +14,16 @@ contract AgreementContract {
         uint256 deadline;   // unix timestamp
     }
 
+    /// @notice A registered participating organisation on the ledger.
+    /// @dev Lightweight on-chain membership registry (kept inside this contract to honour the
+    ///      3-contract rule). Used by the role gates: only a Donor org may create agreements,
+    ///      only the NGO may report / request spend.
+    struct Organisation {
+        bool registered;
+        OrgType orgType;
+        string name;
+    }
+
     struct Agreement {
         uint256 id;
         address creator;        // the donor org that encodes the agreement
@@ -29,22 +39,96 @@ contract AgreementContract {
     mapping(uint256 => Agreement) private agreements;
     mapping(uint256 => Target[]) private agreementTargets;
 
+    // The on-chain organisation registry (owner-managed).
+    mapping(address => Organisation) private organisations;
+    address[] private orgList; // enumeration; entries stay listed even if later deregistered
+
     // The Compliance contract is the only address allowed to commit spend against a budget.
     // Wired once after deployment (Agreement is deployed first, so it cannot know the address up front).
     address public complianceContract;
 
+    // The deployer, recorded at construction. Only the owner may wire the Compliance contract,
+    // so the one-time wiring step can't be front-run by a rogue address on a live network.
+    address public immutable owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    event OrganisationRegistered(address indexed account, OrgType orgType, string name);
+    event OrganisationRemoved(address indexed account);
     event AgreementCreated(uint256 indexed id, address indexed creator);
     event TargetAdded(uint256 indexed agreementId, string indicator, uint256 threshold);
     event AgreementFinalised(uint256 indexed id);
     event BudgetSet(uint256 indexed agreementId, uint256 budget);
     event SpendCommitted(uint256 indexed agreementId, uint256 amount, uint256 committedSpend);
 
-    /// @notice Encode a new programme agreement (donor action).
+    // --- organisation registry (owner-managed) ---
+
+    /// @notice Register (or update) a participating organisation and its role on the ledger.
+    /// @dev Owner only. Re-registering an existing address updates its type/name in place.
+    function registerOrganisation(address account, OrgType orgType, string calldata name) external {
+        require(msg.sender == owner, "only owner");
+        require(account != address(0), "zero address");
+        if (!organisations[account].registered) {
+            orgList.push(account);
+        }
+        organisations[account] = Organisation(true, orgType, name);
+        emit OrganisationRegistered(account, orgType, name);
+    }
+
+    /// @notice Deregister an organisation (owner only). It stays in the enumeration list but
+    ///         no longer counts as registered, so its role gates stop passing.
+    function removeOrganisation(address account) external {
+        require(msg.sender == owner, "only owner");
+        require(organisations[account].registered, "not registered");
+        organisations[account].registered = false;
+        emit OrganisationRemoved(account);
+    }
+
+    /// @notice Look up a registered organisation's full record.
+    function getOrganisation(address account) external view returns (Organisation memory) {
+        return organisations[account];
+    }
+
+    /// @notice True if the address is a currently-registered organisation.
+    function isRegistered(address account) public view returns (bool) {
+        return organisations[account].registered;
+    }
+
+    /// @notice True if the address is registered AND has the given role.
+    function isOrgType(address account, OrgType orgType) public view returns (bool) {
+        Organisation storage o = organisations[account];
+        return o.registered && o.orgType == orgType;
+    }
+
+    /// @notice Number of addresses ever registered (some may now be deregistered).
+    function organisationCount() external view returns (uint256) {
+        return orgList.length;
+    }
+
+    /// @notice Address at the given index in the enumeration list.
+    function organisationAt(uint256 index) external view returns (address) {
+        return orgList[index];
+    }
+
+    /// @notice True if the address is one of the agreement's listed signatories.
+    /// @dev Used by the Verification contract to restrict endorsements/declines to signatories.
+    function isSignatory(uint256 agreementId, address account) external view returns (bool) {
+        address[] storage s = agreements[agreementId].signatories;
+        for (uint256 i = 0; i < s.length; i++) {
+            if (s[i] == account) return true;
+        }
+        return false;
+    }
+
+    /// @notice Encode a new programme agreement (donor action; only a registered Donor org).
     function createAgreement(
         uint256 startDate,
         uint256 endDate,
         address[] calldata signatories
     ) external returns (uint256 id) {
+        require(isOrgType(msg.sender, OrgType.Donor), "only donor org");
         require(endDate > startDate, "end must be after start");
         id = nextAgreementId++;
         Agreement storage a = agreements[id];
@@ -105,8 +189,9 @@ contract AgreementContract {
         emit SpendCommitted(agreementId, amount, a.committedSpend);
     }
 
-    /// @notice Wire the Compliance contract address once, after deployment.
+    /// @notice Wire the Compliance contract address once, after deployment (owner only).
     function setComplianceContract(address c) external {
+        require(msg.sender == owner, "only owner");
         require(complianceContract == address(0), "already set");
         complianceContract = c;
     }
