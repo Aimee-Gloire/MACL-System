@@ -1,8 +1,9 @@
 # dependencies
 node_modules/
 
-# secrets / local env
+# secrets / local env (any directory)
 .env
+**/.env
 *.env.local
 
 # hardhat
@@ -11,10 +12,16 @@ contracts/cache/
 
 # besu generated network material (regenerate with setup-network.sh)
 blockchain/networkFiles/
-blockchain/Node-1/
-blockchain/Node-2/
-blockchain/Node-3/
+blockchain/Node-*/
 blockchain/genesis.json
+
+# evaluation harness (generated artifacts; node_modules covered above)
+evaluation/.last-seed.json
+evaluation/results/*
+!evaluation/results/.gitkeep
+
+# api (node_modules covered above; .env covered by **/.env)
+api/.addresses.json
 
 # logs / os
 *.log
