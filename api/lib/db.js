@@ -2,16 +2,41 @@
 // PostgreSQL (Neon) connection for the document store. Returns null when no
 // DATABASE_URL is set, so the API still runs (the document endpoints then 503).
 
+const fs = require("fs");
 const { Pool } = require("pg");
 
-// Neon and other managed Postgres require TLS; local Postgres usually doesn't.
-// Heuristic: SSL on unless the host is localhost — overridable via DOCSTORE_SSL.
+// TLS policy (S2 / F-12). We NEVER disable certificate verification for a remote
+// database. Local Postgres needs no TLS; any remote host is connected over TLS
+// with the certificate VERIFIED:
+//   - if PG_CA_CERT points to a CA file, we pin it (rejectUnauthorized: true + ca);
+//   - otherwise we still verify against Node's built-in CA store (works for Neon,
+//     whose certs chain to a public CA) and log how to pin a CA explicitly.
+// DOCSTORE_SSL overrides the heuristic: "disable" = no TLS, "require" = force TLS.
 function sslFor(url) {
   const override = (process.env.DOCSTORE_SSL || "").toLowerCase();
-  if (override === "require") return { rejectUnauthorized: false };
   if (override === "disable") return false;
+
   const isLocal = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
-  return isLocal ? false : { rejectUnauthorized: false };
+  if (isLocal && override !== "require") return false; // local dev Postgres: no TLS
+
+  // Remote (or TLS forced): verify the certificate. Pin a CA if provided.
+  const caPath = process.env.PG_CA_CERT;
+  if (caPath) {
+    let ca;
+    try {
+      ca = fs.readFileSync(caPath, "utf8");
+    } catch (e) {
+      throw new Error(`PG_CA_CERT is set to "${caPath}" but the file could not be read: ${e.message}`);
+    }
+    return { rejectUnauthorized: true, ca };
+  }
+  console.warn(
+    "WARNING: connecting to a remote Postgres over TLS without a pinned CA " +
+      "(PG_CA_CERT is unset). The certificate is still verified against the system CA " +
+      "store. To pin the CA, download it from your provider (e.g. the Neon console) and " +
+      "set PG_CA_CERT=/path/to/ca.crt in api/.env."
+  );
+  return { rejectUnauthorized: true };
 }
 
 function makePool() {

@@ -2,43 +2,71 @@
 // BL-13 authentication: per-org login → JWT. The token carries the org's ROLE;
 // every protected route derives the acting role from the token (never from the
 // request body), so a session can only ever act as the org it logged in as.
+//
+// Security hardening (S1):
+//  - F-01: the JWT secret is FAIL-CLOSED. There is no hard-coded default any more;
+//    authConfig() throws a clear startup error if JWT_SECRET is missing or shorter
+//    than 32 characters, so the API refuses to boot/sign tokens on an insecure key.
+//  - F-03: login passwords are no longer stored or compared in plaintext. Each org
+//    has a bcrypt HASH in env (DONOR_PW_HASH / NGO_PW_HASH / AUDIT_PW_HASH) and
+//    checkCredentials uses bcrypt.compare. A role with no hash simply cannot log in.
 
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 const { ApiError } = require("./chain");
 
 const ROLES = ["donor", "ngo", "audit"];
 
+// Minimum acceptable length for the signing secret (F-01). 32 hex chars is the
+// width of `openssl rand -hex 16`; we recommend `openssl rand -hex 32` (64 chars).
+const MIN_SECRET_LENGTH = 32;
+
+// env var name that holds the bcrypt hash for a given role.
+function pwHashEnvName(role) {
+  return `${role.toUpperCase()}_PW_HASH`;
+}
+
+// Read and VALIDATE the auth configuration. Throws (fail-closed) if the JWT secret
+// is missing or too short, so the API cannot run on an insecure default key.
 function authConfig() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < MIN_SECRET_LENGTH) {
+    throw new Error(
+      `JWT_SECRET is missing or too short (need >= ${MIN_SECRET_LENGTH} characters). ` +
+        `Set JWT_SECRET in api/.env to a long random string, e.g. run: openssl rand -hex 32`
+    );
+  }
   return {
-    secret: process.env.JWT_SECRET || "dev-only-macl-secret-change-me",
+    secret,
     ttl: process.env.JWT_TTL || "12h",
-    // username (= role name) -> password, from env (TEST credentials by default).
-    passwords: {
-      donor: process.env.DONOR_PASSWORD || "donor123",
-      ngo: process.env.NGO_PASSWORD || "ngo123",
-      audit: process.env.AUDIT_PASSWORD || "audit123",
+    // role -> bcrypt hash of that org's password (from env). Missing = "" = the
+    // role cannot log in.
+    passwordHashes: {
+      donor: process.env.DONOR_PW_HASH || "",
+      ngo: process.env.NGO_PW_HASH || "",
+      audit: process.env.AUDIT_PW_HASH || "",
     },
   };
 }
 
-function usingDefaultSecret() {
-  return !process.env.JWT_SECRET;
+// Roles that have NO password hash configured, so they can't log in. Used by the
+// boot banner to warn honestly (replaces the old usingDefaultPasswords()).
+function rolesWithoutPasswordHash() {
+  return ROLES.filter((role) => !process.env[pwHashEnvName(role)]);
 }
 
-// True if ANY org login password is unset (i.e. falling back to a TEST default).
-function usingDefaultPasswords() {
-  return !process.env.DONOR_PASSWORD || !process.env.NGO_PASSWORD || !process.env.AUDIT_PASSWORD;
-}
-
-// Validate username/password; return the role on success, else null.
-function checkCredentials(username, password) {
-  const { passwords } = authConfig();
+// Validate username/password; resolve to the role on success, else null. The
+// password is compared against the per-org bcrypt hash with bcrypt.compare — no
+// plaintext password is ever stored or compared. Async because bcrypt is async.
+async function checkCredentials(username, password) {
   const role = String(username || "");
   if (!ROLES.includes(role)) return null;
   if (typeof password !== "string" || password.length === 0) return null;
-  // Constant-ish comparison is overkill for a capstone test credential, but the
-  // exact-match check below is the gate.
-  return passwords[role] === password ? role : null;
+  const { passwordHashes } = authConfig();
+  const hash = passwordHashes[role];
+  if (!hash) return null; // no hash configured for this role → cannot log in
+  const ok = await bcrypt.compare(password, hash);
+  return ok ? role : null;
 }
 
 function signToken(role) {
@@ -76,4 +104,4 @@ function required(req, res, next) {
   }
 }
 
-module.exports = { ROLES, authConfig, usingDefaultSecret, usingDefaultPasswords, checkCredentials, signToken, verifyToken, required };
+module.exports = { ROLES, MIN_SECRET_LENGTH, authConfig, rolesWithoutPasswordHash, checkCredentials, signToken, verifyToken, required };

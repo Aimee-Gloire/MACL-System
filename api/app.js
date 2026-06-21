@@ -10,11 +10,15 @@ const { makeChain } = require("./lib/chain");
 const { makeRouter } = require("./routes");
 const { makeDocsRouter } = require("./routes.documents");
 const { makeAuthRouter } = require("./routes.auth");
-const { required } = require("./lib/auth");
+const { required, authConfig } = require("./lib/auth");
 const { makePool } = require("./lib/db");
 const { makeDocStore, makeUnconfiguredStore } = require("./lib/documents");
 
 function createApp(opts = {}) {
+  // Fail-closed (F-01): validate the JWT secret up front so the app refuses to
+  // boot on a missing/too-short secret rather than silently signing weak tokens.
+  authConfig();
+
   const cfg = opts.config || config();
   const chain = opts.chain || makeChain(cfg);
   // Document store (BL-12): real Postgres store when DATABASE_URL is set,

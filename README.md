@@ -67,13 +67,16 @@ Addresses are pre-filled in `api/.env.example` (the API's config); only paste ne
 **3 — Start the REST API** (new terminal)
 
 ```bash
-cd api && npm install && cp .env.example .env   # signer keys, JWT_SECRET + login passwords (server-side, gitignored)
+cd api && npm install && cp .env.example .env   # signer keys, JWT_SECRET + login hashes (server-side, gitignored)
 # Set DATABASE_URL in api/.env to your Neon (or local) Postgres, then create the table:
 npm run migrate                                  # creates the documents table (skip if not using file storage)
 npm start                                        # listens on http://127.0.0.1:3001
 ```
 
-(Set `JWT_SECRET` and the per-org `*_PASSWORD`s in `api/.env`; defaults are TEST credentials — `donor123` / `ngo123` / `audit123`.)
+Set the auth values in `api/.env` before starting (hardened in S1):
+
+- `JWT_SECRET` is **required and fail-closed** — the API refuses to boot if it is missing or shorter than 32 characters. Generate one with `openssl rand -hex 32`.
+- Login passwords are stored as **bcrypt hashes**, never plaintext. For each org run `node scripts/hash-password.js '<password>'` and paste the printed hash into `DONOR_PW_HASH` / `NGO_PW_HASH` / `AUDIT_PW_HASH`. A role with no hash simply cannot log in.
 
 **4 — Serve the dashboard** (new terminal, from the repo root)
 
@@ -81,7 +84,7 @@ npm start                                        # listens on http://127.0.0.1:3
 npx http-server . -p 8080 -c-1
 ```
 
-Open **<http://localhost:8080/dashboard/>** → you're sent to the **sign-in** page. Log in as an org (e.g. Donor-Admin / `donor123`). The connection light should read `connected · block #N`, rising every ~2s as QBFT produces blocks. The dashboard talks only to the API (port 3001); the API talks to the chain. To act as another org, **Sign out** and sign in as that org. (Needs internet for the Tailwind/font CDNs; all chain data stays local.)
+Open **<http://localhost:8080/dashboard/>** → you're sent to the **sign-in** page. Log in as an org (e.g. Donor-Admin, using the password whose hash you set in step 3). The connection light should read `connected · block #N`, rising every ~2s as QBFT produces blocks. The dashboard talks only to the API (port 3001); the API talks to the chain. To act as another org, **Sign out** and sign in as that org. (Needs internet for the Tailwind/font CDNs; all chain data stays local.)
 
 **Contract unit tests**, anytime (Hardhat, in-process):
 
@@ -100,6 +103,16 @@ cd api && npm test
 - **Via the dashboard (normal path):** sign in as an org and act (sign out + sign in as another to switch) — Donor-Admin creates, budgets, and finalises agreements; NGO submits reports and raises spend requests; all three endorse or decline. Typical flow: create + lock a target (`beneficiaries_reached ≥ 1000`) → sign in as NGO and submit a value (≥ on time = PASS, < threshold = FAIL, ≥ but late = FLAG) → endorse from two different orgs → the record finalises with a block hash, or decline to dispute it. For spend: set a budget → NGO raises a request → the two other orgs endorse to reach 2-of-3 → remaining budget drops.
 - **Via the API (Tier-2):** every dashboard action maps to a REST endpoint (e.g. `POST /api/agreements`, `POST /api/reports`, `POST /api/spend/:id/endorse`, `GET /api/records`, `GET /api/nodes`). The browser sends a role name; the API signs with that role's server-side key.
 - **Directly (optional, admin):** `cd contracts && npx hardhat console --network besu`, then use ethers to call the contracts at the deployed addresses.
+
+## Security & secrets
+
+The repo is built so that **no real secret is ever committed**. Practical rules:
+
+- **`.env` files stay local.** Every `.env` is git-ignored (`**/.env`). **Never** include any `.env` in `submission.zip` or any shared archive — it holds the live `DATABASE_URL`, `JWT_SECRET`, and signer keys. If a copy of a real credential ever leaves this machine, **rotate it** (e.g. reset the Neon database password in the Neon console).
+- **Signer/deployer keys are PUBLIC TEST keys (F-11).** The keys in `api/.env.example` / `contracts/.env.example` are the well-known Hardhat/Besu test keys — no real funds, safe **only** for this isolated permissioned network. Any real deployment must generate **fresh per-org keys** held in a secrets manager / HSM, never in a file. The old deployer key also exists in this repo's **git history**; purge it with `git filter-repo` or BFG before any public release.
+- **Auth is hardened.** `JWT_SECRET` is required and fail-closed (≥ 32 chars or the API won't start); login passwords are bcrypt hashes (`*_PW_HASH`), never plaintext.
+- **Database TLS is verified (F-12).** A remote Postgres is always connected with the certificate verified; pin the provider's CA with `PG_CA_CERT` for the strongest setting.
+- **Secret-leak guard.** Run `cd api && npm run check:secrets` to scan the tracked working tree **and** git history for real secret patterns (Neon `npg_` passwords, non-test private keys, real `JWT_SECRET` values). It prints only the file/commit and pattern, never the secret, and exits non-zero if anything is found. The public test keys are allow-listed, so a clean repo passes.
 
 ## Conclusion
 

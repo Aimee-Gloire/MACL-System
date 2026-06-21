@@ -15,7 +15,7 @@ function makeAuthRouter() {
   // Public: exchange org credentials for a session token.
   r.post("/login", h(async (req, res) => {
     const { username, password } = req.body || {};
-    const role = checkCredentials(username, password);
+    const role = await checkCredentials(username, password);
     if (!role) throw new ApiError(401, "invalid username or password");
     res.json({ token: signToken(role), role });
   }));
