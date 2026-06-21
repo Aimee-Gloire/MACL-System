@@ -34,6 +34,9 @@ const ACTION_ROLE = {
   "report.submit": "ngo",
   "spend.request": "ngo",
   "spend.markSpent": "ngo",
+  // S3 / F-04: registering an organisation is signed with the OWNER key, so only
+  // the dedicated admin login may invoke it. Every other role gets a clean 403.
+  "org.register": "admin",
 };
 function requirePerm(req, action) {
   const need = ACTION_ROLE[action];
@@ -93,12 +96,22 @@ function makeRouter(chain) {
     res.json(await chain.setBudget(req.auth.role, intParam(req.params.id, "id"), req.body.amount));
   }));
 
-  // Admin/owner-signed action (registers an org with the deployer key). Requires a
-  // valid session; not exposed in the dashboard. Hardening to an explicit admin
-  // role is left for later.
+  // Owner-signed action (registers an org with the deployer key). S3 / F-04: now
+  // restricted to the dedicated admin login — any other session gets a clean 403.
   r.post("/org/register", h(async (req, res) => {
+    requirePerm(req, "org.register");
     requireFields(req.body, ["address", "orgType", "name"]);
-    res.json(await chain.registerOrg(req.body.address, req.body.orgType, req.body.name));
+    const result = await chain.registerOrg(req.body.address, req.body.orgType, req.body.name);
+    // Audit line (feeds the structured audit log in Part S6): who registered whom.
+    console.log(JSON.stringify({
+      audit: "org.register",
+      at: new Date().toISOString(),
+      by: req.auth.role,
+      address: req.body.address,
+      orgType: req.body.orgType,
+      tx: result.hash,
+    }));
+    res.json(result);
   }));
 
   r.post("/reports", h(async (req, res) => {

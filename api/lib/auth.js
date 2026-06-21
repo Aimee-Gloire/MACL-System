@@ -15,7 +15,12 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const { ApiError } = require("./chain");
 
-const ROLES = ["donor", "ngo", "audit"];
+// The three on-chain organisations (each has a server-side signing key).
+const ORG_ROLES = ["donor", "ngo", "audit"];
+// All valid LOGIN identities. "admin" (S3 / F-04) is a login-only identity used to
+// gate the owner-key action (registering organisations). It has NO org signing key
+// and therefore NO donor/ngo/audit on-chain powers — see lib/config.js roleKeyEnv.
+const ROLES = [...ORG_ROLES, "admin"];
 
 // Minimum acceptable length for the signing secret (F-01). 32 hex chars is the
 // width of `openssl rand -hex 16`; we recommend `openssl rand -hex 32` (64 chars).
@@ -39,13 +44,9 @@ function authConfig() {
   return {
     secret,
     ttl: process.env.JWT_TTL || "12h",
-    // role -> bcrypt hash of that org's password (from env). Missing = "" = the
-    // role cannot log in.
-    passwordHashes: {
-      donor: process.env.DONOR_PW_HASH || "",
-      ngo: process.env.NGO_PW_HASH || "",
-      audit: process.env.AUDIT_PW_HASH || "",
-    },
+    // role -> bcrypt hash of that role's password (from env). Missing = "" = the
+    // role cannot log in. Covers every login role, including admin (ADMIN_PW_HASH).
+    passwordHashes: Object.fromEntries(ROLES.map((role) => [role, process.env[pwHashEnvName(role)] || ""])),
   };
 }
 
