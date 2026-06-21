@@ -86,7 +86,14 @@ window.MACL = (function () {
     localStorage.setItem(ROLE_KEY, data.role);
     return data;
   }
-  function logout() { clearSession(); location.href = "login.html"; }
+  // Revoke the token server-side (F-08) before dropping the local session. Best
+  // effort: even if the call fails (already expired, API down), we still sign out.
+  async function logout() {
+    try { await fetch(API + "/auth/logout", { method: "POST", headers: authHeaders() }); }
+    catch (_) { /* sign out regardless */ }
+    clearSession();
+    location.href = "login.html";
+  }
 
   // -------------------------------------------------- write handles
   // Returns objects whose methods mirror the original contract-call shape but POST

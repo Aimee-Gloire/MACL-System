@@ -3,9 +3,11 @@
 // without opening a listening socket. Pass a custom `chain` for testing; by
 // default it wires a real one from env config.
 
+const crypto = require("node:crypto");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const { config } = require("./lib/config");
 const { makeChain } = require("./lib/chain");
 const { makeRouter } = require("./routes");
@@ -51,6 +53,18 @@ function createApp(opts = {}) {
   // the download filename (F-07 saves the file via a Blob).
   app.use(cors({ origin: cfg.corsOrigin, exposedHeaders: ["Content-Disposition"] }));
 
+  // S6 / F-09: a generous global rate limit as a safety net against abuse/loops.
+  // Tunable via RATE_LIMIT_MAX; the public health poll is exempt so the dashboard's
+  // connection light never trips it. (Login has its own stricter limiter.)
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: Number(process.env.RATE_LIMIT_MAX || 2000),
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.method === "GET" && req.path === "/api/health",
+    handler: (_req, res) => res.status(429).json({ error: "too many requests — please slow down" }),
+  }));
+
   // Document routes parse their OWN raw (binary) body, so they must be mounted
   // BEFORE the JSON parser (else a .json file upload would be JSON-parsed). They
   // require a valid session (BL-13).
@@ -72,10 +86,18 @@ function createApp(opts = {}) {
   // 404 for anything else.
   app.use((req, res) => res.status(404).json({ error: `not found: ${req.method} ${req.path}` }));
 
-  // Central error handler — maps ApiError.status, defaults to 500.
+  // Central error handler. S6 / F-14: clean 4xx messages (validation / 401 / 403)
+  // are passed through as-is, but 5xx never leak internal/revert text to the client
+  // — the caller gets a generic message + a short error id, and the full detail is
+  // logged server-side under that id so it can still be diagnosed.
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     const status = err.status || 500;
+    if (status >= 500) {
+      const errorId = crypto.randomUUID().slice(0, 8);
+      console.error(`[error ${errorId}] ${req.method} ${req.originalUrl} -> ${status}: ${err && (err.stack || err.message) || err}`);
+      return res.status(status).json({ error: "internal server error", errorId });
+    }
     res.status(status).json({ error: err.message || String(err) });
   });
 

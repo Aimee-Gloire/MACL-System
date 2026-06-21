@@ -10,6 +10,7 @@
 
 const express = require("express");
 const { ApiError } = require("./lib/chain");
+const { write: auditWrite } = require("./lib/audit");
 
 function requireFields(body, fields) {
   for (const f of fields) {
@@ -48,6 +49,29 @@ function requirePerm(req, action) {
 function makeRouter(chain) {
   const r = express.Router();
   const h = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+  // S6 / F-14: audit every SUCCESSFUL write (POST). We wrap res.json so the entry
+  // is captured centrally — role (from the token), the action, the target id, the
+  // evaluation result and the tx hash — without editing each handler. req.params
+  // is populated by the time res.json runs (the route has matched).
+  r.use((req, res, next) => {
+    if (req.method !== "POST") return next();
+    const orig = res.json.bind(res);
+    res.json = (body) => {
+      if (res.statusCode < 400) {
+        const b = req.body || {};
+        auditWrite({
+          role: req.auth && req.auth.role,
+          action: `${req.method} ${req.path}`,
+          target: (req.params && (req.params.id || req.params.hash)) || b.agreementId || b.address || null,
+          result: body && body.result !== undefined ? body.result : null,
+          tx: (body && body.hash) || null,
+        });
+      }
+      return orig(body);
+    };
+    next();
+  });
 
   // ---------------------------------------------------------------- reads
   // (auth is applied at mount time in app.js; /health is the public exception)
@@ -101,17 +125,9 @@ function makeRouter(chain) {
   r.post("/org/register", h(async (req, res) => {
     requirePerm(req, "org.register");
     requireFields(req.body, ["address", "orgType", "name"]);
-    const result = await chain.registerOrg(req.body.address, req.body.orgType, req.body.name);
-    // Audit line (feeds the structured audit log in Part S6): who registered whom.
-    console.log(JSON.stringify({
-      audit: "org.register",
-      at: new Date().toISOString(),
-      by: req.auth.role,
-      address: req.body.address,
-      orgType: req.body.orgType,
-      tx: result.hash,
-    }));
-    res.json(result);
+    // Success is captured by the central audit middleware above (action, admin,
+    // target address, tx hash) — F-14.
+    res.json(await chain.registerOrg(req.body.address, req.body.orgType, req.body.name));
   }));
 
   r.post("/reports", h(async (req, res) => {

@@ -11,9 +11,18 @@
 //    has a bcrypt HASH in env (DONOR_PW_HASH / NGO_PW_HASH / AUDIT_PW_HASH) and
 //    checkCredentials uses bcrypt.compare. A role with no hash simply cannot log in.
 
+const crypto = require("node:crypto");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const { ApiError } = require("./chain");
+
+// S6 / F-08: server-side revocation. Each token carries a unique id (jti); logout
+// adds that id to this deny-list so the exact token can no longer be used, even
+// though it hasn't expired. Entries auto-clear when the token would have expired
+// anyway, so the list stays small. (In-memory: a process restart clears it, which
+// only ever ERRS ON THE SAFE SIDE for a short-lived token — fine at capstone scale;
+// a multi-instance deployment would back this with Redis/Postgres.)
+const revokedJtis = new Map(); // jti -> exp (unix seconds)
 
 // The three on-chain organisations (each has a server-side signing key).
 const ORG_ROLES = ["donor", "ngo", "audit"];
@@ -43,7 +52,8 @@ function authConfig() {
   }
   return {
     secret,
-    ttl: process.env.JWT_TTL || "12h",
+    // S6 / F-08: short sessions by default (was 12h). Override with JWT_TTL.
+    ttl: process.env.JWT_TTL || "1h",
     // role -> bcrypt hash of that role's password (from env). Missing = "" = the
     // role cannot log in. Covers every login role, including admin (ADMIN_PW_HASH).
     passwordHashes: Object.fromEntries(ROLES.map((role) => [role, process.env[pwHashEnvName(role)] || ""])),
@@ -72,12 +82,26 @@ async function checkCredentials(username, password) {
 
 function signToken(role) {
   const { secret, ttl } = authConfig();
-  return jwt.sign({ role }, secret, { expiresIn: ttl });
+  // jwtid (jti) gives every token a unique id so it can be revoked individually.
+  return jwt.sign({ role }, secret, { expiresIn: ttl, jwtid: crypto.randomUUID() });
 }
 
 function verifyToken(token) {
   const { secret } = authConfig();
   return jwt.verify(token, secret); // throws on invalid/expired
+}
+
+// S6 / F-08: revoke a single token (by its decoded payload) — used by logout.
+function revokeToken(payload) {
+  if (!payload || !payload.jti) return;
+  revokedJtis.set(payload.jti, payload.exp || 0);
+  // Drop the entry automatically once the token would have expired anyway.
+  const ms = (payload.exp || 0) * 1000 - Date.now();
+  if (ms > 0) { const t = setTimeout(() => revokedJtis.delete(payload.jti), ms); if (t.unref) t.unref(); }
+  else revokedJtis.delete(payload.jti);
+}
+function isRevoked(jti) {
+  return jti != null && revokedJtis.has(jti);
 }
 
 // Pull a token from the Authorization header ONLY. S5 / F-07: the previous
@@ -91,18 +115,20 @@ function tokenFromReq(req) {
   return null;
 }
 
-// Express middleware: require a valid token; set req.auth = { role }.
+// Express middleware: require a valid, non-revoked token; set req.auth.
 function required(req, res, next) {
   const token = tokenFromReq(req);
   if (!token) return next(new ApiError(401, "authentication required"));
   try {
-    const payload = verifyToken(token);
+    const payload = verifyToken(token);          // throws on bad/expired token
     if (!ROLES.includes(payload.role)) throw new Error("bad role");
-    req.auth = { role: payload.role };
+    if (isRevoked(payload.jti)) throw new Error("revoked");  // F-08: logged out
+    // carry jti + exp so logout can revoke exactly this token.
+    req.auth = { role: payload.role, jti: payload.jti, exp: payload.exp };
     next();
   } catch (_) {
     next(new ApiError(401, "invalid or expired token"));
   }
 }
 
-module.exports = { ROLES, MIN_SECRET_LENGTH, authConfig, rolesWithoutPasswordHash, checkCredentials, signToken, verifyToken, required };
+module.exports = { ROLES, MIN_SECRET_LENGTH, authConfig, rolesWithoutPasswordHash, checkCredentials, signToken, verifyToken, revokeToken, required };
