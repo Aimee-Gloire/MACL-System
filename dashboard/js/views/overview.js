@@ -4,8 +4,8 @@
 MACL_UI.ready(async () => {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
 
-  // Chain id (Ledger Summary card).
-  try { set("m-chainid", (await MACL.getChainId()).toString()); } catch (_) {}
+  // Latest block number (Network Integrity card) — proposal §3.2 wants it shown.
+  try { set("m-latestblock", `#${(await MACL.ping()).toLocaleString()}`); } catch (_) {}
 
   // -------- Network Integrity panel (Part 4) --------
   // On Besu it queries all three node RPCs and shows each as in-sync / behind /
@@ -36,19 +36,20 @@ MACL_UI.ready(async () => {
   const agreements = await MACL.fetchAgreements();
   const finalisedAg = agreements.filter((r) => r.finalised).length;
   set("m-agreements", agreements.length.toLocaleString());
-  set("m-finalised", `${finalisedAg} finalised`);
+  set("m-finalised", `${finalisedAg} agreements finalised`);
 
   // Records (pass the acting address so we know what THIS org has endorsed)
   const acting = MACL.roleMeta();
   const records = await MACL.fetchRecords(acting ? acting.address : null);
-  const passCount = records.filter((r) => MACL.fmtResult(r.rec.result) === "PASS").length;
   const finalRecs = records.filter((r) => r.rec.finalised);
   // "Pending" = still in progress: neither finalised nor terminally unverified (BL-9).
   const pending = records.filter((r) => !r.rec.finalised && !r.rec.unverified).length;
 
   set("m-pending", pending.toLocaleString());
-  set("m-rate", records.length ? `${Math.round((passCount / records.length) * 100)}%` : "—");
-  set("m-rate-note", records.length ? `${passCount}/${records.length} reports PASS` : "no reports yet");
+  // Progress bar reflects real data: how much of the ledger is still pending
+  // endorsement (0% on an empty chain, not the old hard-coded 66%).
+  const bar = document.getElementById("m-pending-bar");
+  if (bar) bar.style.width = records.length ? `${Math.round((pending / records.length) * 100)}%` : "0%";
   set("m-records", records.length.toLocaleString());
   set("m-records-final", finalRecs.length.toLocaleString());
 

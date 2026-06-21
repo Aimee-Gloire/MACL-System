@@ -28,8 +28,14 @@
       </div>
       <div>
         <label class="block text-xs font-semibold uppercase tracking-wider text-[#515f74] mb-1">Password</label>
-        <input id="password" type="password" autocomplete="current-password"
-               class="w-full border border-[#bfc9c6] rounded-lg p-3 text-sm" placeholder="••••••••"/>
+        <div class="relative">
+          <input id="password" type="password" autocomplete="current-password"
+                 class="w-full border border-[#bfc9c6] rounded-lg p-3 pr-16 text-sm" placeholder="••••••••"/>
+          <button id="togglePassword" type="button" aria-label="Show password" aria-pressed="false"
+                  class="absolute inset-y-0 right-0 px-3 text-xs font-semibold uppercase tracking-wider text-[#515f74] hover:text-[#00322d]">
+            Show
+          </button>
+        </div>
       </div>
       <button id="loginBtn" type="submit"
               class="w-full bg-[#00322d] text-white rounded-lg py-3 text-sm font-semibold hover:opacity-90 active:scale-[.99] transition">
@@ -41,9 +47,22 @@
     <p class="text-[11px] text-[#515f74] mt-6 leading-relaxed">
       You act as the organisation you sign in as. To act as another org, sign out and sign in as that org.
     </p>
-    <p class="text-[11px] text-[#8a958f] mt-2 code">Capstone test passwords: donor123 · ngo123 · audit123</p>
   </div>
 
+  <script>
+    (function () {
+      var btn = document.getElementById('togglePassword');
+      var input = document.getElementById('password');
+      btn.addEventListener('click', function () {
+        var show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        btn.textContent = show ? 'Hide' : 'Show';
+        btn.setAttribute('aria-pressed', String(show));
+        btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        input.focus();
+      });
+    })();
+  </script>
   <script src="config.js"></script>
   <script src="js/chain.js"></script>
   <script src="js/login.js"></script>

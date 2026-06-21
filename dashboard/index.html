@@ -122,45 +122,40 @@
 </head>
 <body class="bg-background text-on-surface font-body-md overflow-x-hidden">
 <!-- SideNavBar (Authority: JSON & Style Guidance) -->
-<aside class="md:fixed md:left-0 md:top-0 md:h-full w-full md:w-[260px] bg-surface-container-low dark:bg-surface-container-highest border-r border-outline-variant dark:border-outline flex flex-col py-8 px-4 gap-y-stack-md z-50">
-<!-- Brand Header -->
+<aside class="md:fixed md:left-0 md:top-0 md:h-full w-full md:w-[260px] bg-surface-container-low border-r border-outline-variant flex flex-col py-8 px-4 gap-y-stack-md z-50">
 <div class="flex items-center gap-3 mb-8 px-2">
-<div class="w-8 h-8 bg-primary rounded flex items-center justify-center text-on-primary">
-<span class="material-symbols-outlined text-sm">account_balance</span>
+<div class="w-10 h-10 bg-primary rounded flex items-center justify-center text-white">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">verified_user</span>
 </div>
 <div>
-<h1 class="font-title-sm text-title-sm text-primary dark:text-primary-fixed">MACL Ledger</h1>
-<p class="text-[10px] font-code-metadata opacity-60">Permissioned · Local Node</p>
+<h1 class="font-title-sm text-title-sm text-primary">MACL Ledger</h1>
+<p class="text-[10px] font-code-metadata opacity-60">Permissioned · Besu · 3-node QBFT</p>
 </div>
 </div>
-<!-- Navigation Links -->
-<nav class="flex-1 flex flex-col gap-1 ledger-line">
-<a href="index.html" class="flex items-center gap-4 bg-primary-container text-on-primary-container rounded-lg px-4 py-3 font-semibold cursor-pointer z-10">
+<nav class="flex-1 flex flex-col gap-1">
+<a class="flex items-center gap-4 bg-primary-container text-on-primary-container rounded-lg px-4 py-3 font-semibold" href="index.html">
 <span class="material-symbols-outlined">dashboard</span>
 <span class="font-body-sm text-body-sm">Overview</span>
 </a>
-<a href="agreements.html" class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all cursor-pointer z-10 rounded-lg">
+<a class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all rounded-lg" href="agreements.html">
 <span class="material-symbols-outlined">description</span>
 <span class="font-body-sm text-body-sm">Agreements</span>
 </a>
-<a href="spend.html" class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all cursor-pointer z-10 rounded-lg">
+<a class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all rounded-lg" href="spend.html">
 <span class="material-symbols-outlined">payments</span>
 <span class="font-body-sm text-body-sm">Budget &amp; Spend</span>
 </a>
-<a href="reports.html" class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all cursor-pointer z-10 rounded-lg">
+<a class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all rounded-lg" href="reports.html">
 <span class="material-symbols-outlined">assessment</span>
 <span class="font-body-sm text-body-sm">Reports</span>
 </a>
-<a href="audit.html" class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all cursor-pointer z-10 rounded-lg">
+<a class="flex items-center gap-4 text-secondary px-4 py-3 hover:bg-surface-container-high transition-all rounded-lg" href="audit.html">
 <span class="material-symbols-outlined">history_edu</span>
 <span class="font-body-sm text-body-sm">Audit Trail</span>
 </a>
 </nav>
-<!-- Footer: live connection light -->
-<div class="mt-auto flex flex-col gap-2">
-<div class="mt-4 pt-4 border-t border-outline-variant px-2">
+<div class="mt-auto border-t border-outline-variant pt-6 flex flex-col gap-1 px-2">
 <div id="macl-conn"></div>
-</div>
 </div>
 </aside>
 <!-- Main Content Area -->
@@ -179,7 +174,7 @@
 <!-- Bento Hero Section -->
 <div class="grid grid-cols-12 gap-gutter">
 <!-- Metrics Grid -->
-<div class="col-span-12 lg:col-span-8 grid grid-cols-1 md:grid-cols-3 gap-stack-md">
+<div class="col-span-12 lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-stack-md">
 <!-- Metric: Active Agreements -->
 <div class="bg-surface-container-lowest border border-outline-variant p-stack-lg rounded-lg flex flex-col justify-between h-[180px]">
 <div>
@@ -188,7 +183,7 @@
 </div>
 <div class="flex items-center gap-2 text-secondary font-body-sm">
 <span class="material-symbols-outlined text-sm">lock</span>
-<span id="m-finalised">— finalised</span>
+<span id="m-finalised">— agreements finalised</span>
 </div>
 </div>
 <!-- Metric: Pending Endorsements -->
@@ -202,18 +197,8 @@
 <span>2-of-3 consensus required</span>
 </div>
 <div class="w-full bg-surface-container-high h-1 rounded-full overflow-hidden">
-<div class="bg-primary h-full" style="width:66%"></div>
+<div class="bg-primary h-full" id="m-pending-bar" style="width:0%"></div>
 </div>
-</div>
-</div>
-<!-- Metric: Compliance Rate -->
-<div class="bg-surface-container-lowest border border-outline-variant p-stack-lg rounded-lg flex flex-col justify-between h-[180px]">
-<div>
-<span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Compliance Rate</span>
-<div class="font-display-lg text-display-lg text-primary mt-2" id="m-rate">—</div>
-</div>
-<div class="flex items-center gap-2">
-<span class="font-body-sm text-secondary" id="m-rate-note">PASS over all reports</span>
 </div>
 </div>
 </div>
@@ -228,15 +213,15 @@
 <div class="text-[10px] font-code-metadata opacity-70">loading nodes…</div>
 </div>
 </div>
-<div class="mt-4 pt-4 border-t border-primary-container z-10">
+<div class="mt-4 pt-4 border-t border-primary-container z-10 space-y-1.5">
+<div class="font-code-metadata text-[11px] flex justify-between opacity-80">
+<span>Latest block</span>
+<span class="text-on-primary-container" id="m-latestblock">—</span>
+</div>
 <div class="font-code-metadata text-[11px] flex justify-between opacity-80">
 <span>Latest finalised hash</span>
 <span class="text-on-primary-container" id="m-latesthash">—</span>
 </div>
-</div>
-<!-- Decorative mask/metaphor -->
-<div class="absolute -right-8 -bottom-8 opacity-10">
-<span class="material-symbols-outlined text-[120px]" style="font-variation-settings: 'FILL' 1;">security</span>
 </div>
 </div>
 </div>
@@ -293,21 +278,13 @@
 </div>
 <div class="space-y-3">
 <div class="flex justify-between items-center py-2 border-b border-outline-variant">
-<span class="text-sm font-medium">Total Records</span>
+<span class="text-sm font-medium">Reports submitted</span>
 <span class="text-sm text-secondary font-code-metadata" id="m-records">—</span>
 </div>
-<div class="flex justify-between items-center py-2 border-b border-outline-variant">
-<span class="text-sm font-medium">Finalised Records</span>
+<div class="flex justify-between items-center py-2">
+<span class="text-sm font-medium">Records finalised</span>
 <span class="text-sm text-green-700 font-bold font-code-metadata" id="m-records-final">—</span>
 </div>
-<div class="flex justify-between items-center py-2">
-<span class="text-sm font-medium">Chain ID</span>
-<span class="text-sm text-primary font-code-metadata" id="m-chainid">—</span>
-</div>
-</div>
-<!-- Watermark -->
-<div class="absolute top-2 right-2 opacity-5 pointer-events-none select-none">
-<span class="font-code-metadata text-xs rotate-12 block">AUTHENTICATED LEDGER SECURE</span>
 </div>
 </div>
 </div>
