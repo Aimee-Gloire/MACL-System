@@ -1,0 +1,22 @@
+{
+  "name": "macl-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MACL Tier-2 REST API (Node/Express + ethers v6). The single broker between the dashboard and the 3-node Besu chain: holds the signer keys server-side, exposes one endpoint per contract action, and proxies the cross-node integrity reads so the validators' JSON-RPC is never public.",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "migrate": "node scripts/migrate.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.0",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.12.0"
+  }
+}
