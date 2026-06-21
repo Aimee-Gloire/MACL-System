@@ -134,7 +134,7 @@
 </head>
 <body class="bg-background text-on-background font-body-md selection:bg-primary-fixed selection:text-on-primary-fixed">
 <!-- Sidebar Navigation -->
-<aside class="fixed left-0 top-0 h-full w-[260px] bg-surface-container-low border-r border-outline-variant flex flex-col py-8 px-4 gap-y-stack-md z-50">
+<aside class="md:fixed md:left-0 md:top-0 md:h-full w-full md:w-[260px] bg-surface-container-low border-r border-outline-variant flex flex-col py-8 px-4 gap-y-stack-md z-50">
 <div class="mb-8 px-4">
 <h1 class="font-title-sm text-title-sm text-primary">MACL Ledger</h1>
 <p class="text-xs text-on-surface-variant font-code-metadata opacity-70">Permissioned · Local Node</p>
@@ -168,7 +168,7 @@
 </div>
 </aside>
 <!-- Main Content Area -->
-<main class="ml-[260px] min-h-screen">
+<main class="ml-0 md:ml-[260px] min-h-screen">
 <!-- Top Bar -->
 <header class="w-full sticky top-0 z-40 bg-surface border-b border-outline-variant flex justify-between items-center px-margin-desktop py-4">
 <div class="flex items-center gap-stack-lg">
@@ -241,7 +241,7 @@
 </div>
 </main>
 <!-- Footer Identity (Mini) -->
-<footer class="ml-[260px] border-t border-outline-variant p-6 bg-surface-container-low no-print">
+<footer class="ml-0 md:ml-[260px] border-t border-outline-variant p-6 bg-surface-container-low no-print">
 <div class="flex justify-between items-center opacity-50">
 <span class="text-xs font-code-metadata uppercase tracking-widest">MACL — Multi-Stakeholder Accountability &amp; Compliance Ledger</span>
 <div class="flex gap-4">
@@ -249,8 +249,7 @@
 </div>
 </div>
 </footer>
-<!-- MACL chain wiring -->
-<script src="vendor/ethers.umd.min.js"></script>
+<!-- MACL app wiring (browser talks to the Tier-2 API only) -->
 <script src="config.js"></script>
 <script src="js/chain.js"></script>
 <script src="js/ui.js"></script>

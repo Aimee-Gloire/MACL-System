@@ -17,16 +17,9 @@ MACL_UI.ready(async () => {
     const acting = MACL.roleMeta();
     rows = await MACL.fetchRecords(acting.address);
 
-    // which of the 3 stakeholders endorsed / declined each record
-    const { verification } = MACL.contracts();
+    // fetchRecords already resolves r.endorsers / r.decliners (role-meta arrays)
+    // from the API. Add the integrity badge (cross-node check, proxied by the API).
     for (const r of rows) {
-      r.endorsers = []; r.decliners = [];
-      for (const [, meta] of roles) {
-        if (await verification.hasEndorsed(BigInt(r.rec.id), meta.address)) r.endorsers.push(meta);
-        else if (await verification.hasDeclined(BigInt(r.rec.id), meta.address)) r.decliners.push(meta);
-      }
-      // Integrity badge: the SAME verifyRecord() the spend page uses. It returns a
-      // `nodes` field left null today; Part 4 fills it with the cross-node check.
       r.integrity = await MACL.verifyRecord({ kind: "record", id: r.rec.id });
     }
 
@@ -50,13 +43,25 @@ MACL_UI.ready(async () => {
   const pill = (label) => {
     const c = { PASS: "bg-green-100 text-green-800", FAIL: "bg-red-100 text-red-800",
                 FLAG: "bg-amber-100 text-amber-800", PENDING: "bg-surface-container-high text-on-surface-variant" }[label];
-    return `<span class="px-2 py-1 ${c} text-[10px] font-bold rounded">${label}</span>`;
+    return `<span data-help="${label.toLowerCase()}" class="px-2 py-1 ${c} text-[10px] font-bold rounded">${label}</span>`;
   };
-  // Integrity badge — driven by MACL.verifyRecord (extensible to a cross-node
-  // check in Part 4). Shown on finalised records.
+  // Integrity badge — driven by MACL.verifyRecord. On Besu it reports cross-node
+  // agreement (how many of the 3 nodes hold an identical copy); on the single
+  // local node it just confirms the record is on the ledger. Shown on finalised records.
   const integrityBadge = (integ) => {
     if (!integ || !integ.ok) {
       return `<span class="inline-flex items-center gap-1 text-[10px] text-error mt-1" title="${MACL.esc(integ ? integ.detail : "unverifiable")}"><span class="material-symbols-outlined text-xs">error</span>${MACL.esc(integ ? integ.label : "Unverifiable")}</span>`;
+    }
+    if (integ.nodes) {
+      const { agree, total } = integ.nodes;
+      const all = agree === total, maj = agree >= 2; // 2-of-3 majority
+      const cls = all ? "text-primary" : maj ? "text-amber-600" : "text-error";
+      const icon = all ? "verified" : maj ? "warning" : "error";
+      const text = all ? `verified across ${total} nodes` : `${agree} of ${total} nodes agree`;
+      const detail = all
+        ? "All three nodes hold an identical copy of this record."
+        : `Only ${agree} of ${total} nodes hold this record — the rest are out of sync or unreachable. The 2-of-3 majority record stands.`;
+      return `<span class="inline-flex items-center gap-1 text-[10px] ${cls} mt-1" title="${MACL.esc(detail)}"><span class="material-symbols-outlined text-xs">${icon}</span>${text}</span>`;
     }
     return `<span class="inline-flex items-center gap-1 text-[10px] text-primary mt-1" title="${MACL.esc(integ.detail)}"><span class="material-symbols-outlined text-xs">verified</span>${MACL.esc(integ.label)}</span>`;
   };
@@ -64,7 +69,7 @@ MACL_UI.ready(async () => {
   function renderTable() {
     const body = document.getElementById("au-rows");
     if (!rows.length) {
-      body.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">No records yet. The NGO must submit a report first.</td></tr>`;
+      body.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">No records yet — sign in as the NGO and submit a report to start the verification trail.</td></tr>`;
       return;
     }
     const acting = MACL.getRole();
@@ -82,18 +87,30 @@ MACL_UI.ready(async () => {
       // status + actions
       let status, action = "";
       if (r.rec.finalised) {
-        status = `<div class="flex flex-col"><span class="flex items-center gap-1.5 text-xs text-primary font-bold"><span class="material-symbols-outlined text-sm">lock</span>Finalised</span>${integrityBadge(r.integrity)}</div>`;
+        status = `<div class="flex flex-col"><span data-help="finalise" class="flex items-center gap-1.5 text-xs text-primary font-bold"><span class="material-symbols-outlined text-sm">lock</span>Finalised</span>${integrityBadge(r.integrity)}</div>`;
+      } else if (r.rec.unverified) {
+        // BL-9: terminal — the window passed and it was marked unverified.
+        status = `<span data-help="unverified" class="flex items-center gap-1.5 text-xs text-error font-bold"><span class="material-symbols-outlined text-sm">gpp_bad</span>Unverified</span>`;
+      } else if (r.expired) {
+        // BL-9: window passed, not finalised, not yet marked — needs marking.
+        status = `<span data-help="expired" class="flex items-center gap-1.5 text-xs text-amber-600 font-bold"><span class="material-symbols-outlined text-sm">schedule</span>Window passed</span>`;
       } else if (declines > 0) {
         status = `<span class="flex items-center gap-1.5 text-xs text-error font-bold"><span class="material-symbols-outlined text-sm">warning</span>Disputed (${declines})</span>`;
       } else {
         status = `<span class="flex items-center gap-1.5 text-xs text-secondary"><span class="w-2 h-2 rounded-full bg-secondary"></span>In Progress</span>`;
       }
-      if (!r.rec.finalised) {
-        if (r.endorsedByActing) action = `<span class="text-[10px] text-on-surface-variant block mt-1">${MACL.esc(actingLabel)} endorsed</span>`;
+      // Actions only on a still-live record (not finalised, not already unverified).
+      if (!r.rec.finalised && !r.rec.unverified) {
+        if (r.expired) {
+          // The window has passed: the only action left is to record the terminal UNVERIFIED state.
+          action = `<div class="flex gap-1 mt-1 no-print">
+<button data-expire="${id}" data-perm="record.endorse" data-help="unverified" onclick="event.stopPropagation()" class="border border-error text-error px-2.5 py-1 rounded text-xs font-semibold hover:bg-error hover:text-white active:scale-95 transition-all">Mark unverified</button>
+</div>`;
+        } else if (r.endorsedByActing) action = `<span class="text-[10px] text-on-surface-variant block mt-1">${MACL.esc(actingLabel)} endorsed</span>`;
         else if (r.declinedByActing) action = `<span class="text-[10px] text-error block mt-1">${MACL.esc(actingLabel)} declined</span>`;
         else action = `<div class="flex gap-1 mt-1 no-print">
-<button data-endorse="${id}" data-perm="record.endorse" onclick="event.stopPropagation()" class="bg-primary text-white px-2.5 py-1 rounded text-xs font-semibold hover:opacity-90 active:scale-95 transition-all">Endorse</button>
-<button data-decline="${id}" data-perm="record.decline" onclick="event.stopPropagation()" class="border border-error text-error px-2.5 py-1 rounded text-xs font-semibold hover:bg-error hover:text-white active:scale-95 transition-all">Decline</button>
+<button data-endorse="${id}" data-perm="record.endorse" data-help="endorse" onclick="event.stopPropagation()" class="bg-primary text-white px-2.5 py-1 rounded text-xs font-semibold hover:opacity-90 active:scale-95 transition-all">Endorse</button>
+<button data-decline="${id}" data-perm="record.decline" data-help="decline" onclick="event.stopPropagation()" class="border border-error text-error px-2.5 py-1 rounded text-xs font-semibold hover:bg-error hover:text-white active:scale-95 transition-all">Decline</button>
 </div>`;
       }
 
@@ -102,7 +119,7 @@ MACL_UI.ready(async () => {
 <td class="px-6 py-5 text-on-surface-variant">${MACL.esc(r.target.indicator)} ≥ ${r.target.threshold} ${MACL.esc(r.target.unit)}</td>
 <td class="px-6 py-5 font-code-metadata text-on-surface">${r.rec.reportedValue} ${MACL.esc(r.target.unit)}</td>
 <td class="px-6 py-5">${pill(label)}</td>
-<td class="px-6 py-5"><div class="flex items-center gap-2"><div class="flex -space-x-2">${avatars}</div><span class="text-xs font-medium text-on-surface-variant">${count}/${total} endorsed</span></div>${declines ? `<span class="text-[10px] text-error">${declines} declined</span>` : ""}</td>
+<td class="px-6 py-5"><div class="flex items-center gap-2"><div class="flex -space-x-2">${avatars}</div><span data-help="2of3" class="text-xs font-medium text-on-surface-variant">${count}/${total} endorsed</span></div>${declines ? `<span class="text-[10px] text-error">${declines} declined</span>` : ""}</td>
 <td class="px-6 py-5">${status}${action}</td>
 <td class="px-6 py-5 text-right"><span class="material-symbols-outlined text-outline group-hover:text-primary transition-transform duration-300" id="icon-row-${id}">expand_more</span></td>
 </tr>`;
@@ -129,18 +146,18 @@ ${endorserList}${declinerList}
 <div class="space-y-4">
 <h4 class="text-label-caps text-on-surface-variant border-b border-outline-variant pb-2">LEDGER AUTHENTICITY</h4>
 <div class="bg-surface-container-lowest p-4 border border-outline-variant rounded">
-<span class="text-[10px] text-on-surface-variant block mb-1">FINALISED BLOCK HASH</span>
+<span data-help="blockhash" class="text-[10px] text-on-surface-variant block mb-1">FINALISED BLOCK HASH</span>
 <div class="font-code-metadata text-[11px] break-all text-on-surface">${r.rec.finalised ? MACL.esc(r.blockHash) : "— (not finalised)"}</div>
 </div>
 ${MACL.hasHash(r.rec.documentHash) ? `<div class="bg-surface-container-lowest p-4 border border-outline-variant rounded">
 <span class="text-[10px] text-on-surface-variant block mb-1">SUPPORTING-DOCUMENT FINGERPRINT (SHA-256)</span>
 <div class="font-code-metadata text-[11px] break-all text-on-surface">${MACL.esc(r.rec.documentHash)}</div>
 <div class="mt-3 flex flex-wrap items-center gap-2">
-<label class="text-xs text-on-surface-variant">Verify a file against this:</label>
-<input type="file" data-verifyrec="${id}" onclick="event.stopPropagation()" class="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary-container file:text-white file:px-2 file:py-1 file:text-[11px]"/>
+<a href="${MACL.documentUrl(r.rec.documentHash)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs text-primary font-semibold hover:underline">View</a>
+<button type="button" data-verify-stored="${r.rec.documentHash}" data-out="verifyrec-out-${id}" onclick="event.stopPropagation()" class="text-xs text-primary font-semibold hover:underline">Verify</button>
 <span class="text-xs font-semibold" id="verifyrec-out-${id}"></span>
 </div>
-<p class="text-[10px] text-on-surface-variant mt-2">A match proves the document is unchanged since it was recorded — not that it was genuine in the first place.</p>
+<p class="text-[10px] text-on-surface-variant mt-2">Verify re-hashes the stored file on the server against the on-chain hash: a match proves it is unchanged since recorded — not that it was genuine in the first place.</p>
 </div>` : ""}
 <div class="grid grid-cols-2 gap-4">
 <div><span class="text-[10px] text-on-surface-variant block mb-1">SUBMITTER</span><span class="text-xs font-bold text-on-surface">${MACL.esc(MACL.labelForAddress(r.rec.submitter))}</span></div>
@@ -159,29 +176,17 @@ ${MACL.hasHash(r.rec.documentHash) ? `<div class="bg-surface-container-lowest p-
       b.onclick = (e) => { e.stopPropagation(); act("endorse", b.getAttribute("data-endorse")); });
     body.querySelectorAll("button[data-decline]").forEach((b) =>
       b.onclick = (e) => { e.stopPropagation(); act("decline", b.getAttribute("data-decline")); });
+    body.querySelectorAll("button[data-expire]").forEach((b) =>
+      b.onclick = (e) => { e.stopPropagation(); act("markUnverified", b.getAttribute("data-expire")); });
 
-    // wire the "Verify document" file inputs (records carrying a documentHash)
-    body.querySelectorAll("input[data-verifyrec]").forEach((inp) =>
-      inp.onchange = async (e) => {
-        e.stopPropagation();
-        const rid = inp.getAttribute("data-verifyrec");
-        const out = document.getElementById("verifyrec-out-" + rid);
-        const row = rows.find((r) => r.rec.id.toString() === rid);
-        const file = inp.files[0];
-        if (!file || !row) return;
-        out.textContent = "Checking…"; out.className = "text-xs font-semibold text-on-surface-variant";
-        try {
-          const v = await MACL.verifyDocument(file, row.rec.documentHash);
-          // Honest framing (decision C): unchanged-since-recorded, not authenticity.
-          if (v.match) { out.textContent = "✓ Document verified"; out.title = "Unchanged since recorded — not a proof of authenticity."; out.className = "text-xs font-semibold text-green-700"; }
-          else { out.textContent = "✗ Does not match the ledger"; out.className = "text-xs font-semibold text-error"; }
-        } catch (err) { out.textContent = MACL.parseError(err); out.className = "text-xs font-semibold text-error"; }
-      });
+    // wire the one-click View/Verify controls (BL-14)
+    MACL_UI.wireVerify(body);
   }
 
   async function act(kind, id) {
     const { verification } = MACL.contracts(MACL.getRole());
-    const label = kind === "endorse" ? `Endorse record #${id}` : `Decline record #${id}`;
+    const label = { endorse: `Endorse record #${id}`, decline: `Decline record #${id}`,
+                    markUnverified: `Mark record #${id} unverified` }[kind];
     try { await MACL.withTx(label, () => verification[kind](BigInt(id))); }
     catch (_) { return; }
     await load();

@@ -5,9 +5,15 @@
  *    The document is hashed IN THE BROWSER (SHA-256) — only the hash is sent on-chain.
  *  - The two NON-submitter roles endorse/decline; a request is APPROVED at 2-of-3 and
  *    the remaining budget drops. The submitter cannot approve its own request.
- *  - Each request carries an integrity badge (MACL.verifyRecord) and a
- *    "Verify document" control (MACL.verifyDocument) to re-check the document.
- * Everything reads straight from the contracts via ethers — no API.
+ *  - After approval the requester can MARK IT SPENT (BL-7): the actual receipt is
+ *    uploaded + hashed server-side and only its SHA-256 is pinned on-chain, closing the
+ *    loop request -> approved (supporting doc) -> spent (receipt). The receipt is re-verifiable.
+ *  - Spend is FLAGGED, not blocked, when the programme has a failing compliance
+ *    record (BL-8) — the 2-of-3 approval still decides (deliberate decoupling).
+ *  - Each request carries an integrity badge (MACL.verifyRecord) and one-click
+ *    View / Verify on its stored document + receipt (BL-14, MACL.verifyStoredDocument).
+ * Everything reads and writes through the Tier-2 REST API (api/) — the browser
+ * holds no keys and never talks to the chain directly.
  */
 MACL_UI.ready(async () => {
   const cfg = MACL.cfg;
@@ -51,10 +57,19 @@ MACL_UI.ready(async () => {
   function pickedAgreement() {
     return agreements.find((r) => r.id === document.getElementById("sp-agreement").value);
   }
-  function onPickFundable() {
+  async function onPickFundable() {
     const r = pickedAgreement();
     set("sp-remaining", r ? `Remaining budget: ${MACL.fmtMoney(r.remaining)}` : "");
     validateAmount();
+    // BL-8: flag (do NOT block) raising spend on a programme that is failing targets.
+    const warn = document.getElementById("sp-compliance-warn");
+    if (warn) {
+      warn.classList.add("hidden");
+      if (r && await MACL.hasFailingRecords(r.id)) {
+        warn.textContent = "⚠ This programme has a failing compliance record. Spend is still allowed (the 2-of-3 approval decides), but approvers should weigh this.";
+        warn.classList.remove("hidden");
+      }
+    }
   }
 
   // Mirror the contract's over-budget check in the UI so the user gets an
@@ -72,18 +87,21 @@ MACL_UI.ready(async () => {
   }
   document.getElementById("sp-amount").addEventListener("input", validateAmount);
 
-  // ---------------------------------------------------------------- file hashing (in-browser)
+  // ---------------------------------------------------------------- supporting document upload
+  // The file is stored in the document store (BL-12) and the server returns its
+  // SHA-256, which we then put on-chain. Only the hash goes on-chain.
   document.getElementById("sp-file").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     const out = document.getElementById("sp-filehash");
     if (!file) { pendingHash = null; out.textContent = "No file selected."; return; }
-    out.textContent = "Hashing locally…";
+    out.textContent = "Uploading & hashing on the server…";
     try {
-      pendingHash = await MACL.hashFile(file);
-      out.innerHTML = `SHA-256 (stays in browser): <span class="text-primary">${pendingHash}</span>`;
+      const doc = await MACL.uploadDocument(file);
+      pendingHash = doc.hash;
+      out.innerHTML = `Stored · SHA-256 on-chain: <span class="text-primary">${pendingHash}</span>`;
     } catch (err) {
       pendingHash = null;
-      out.textContent = "Could not hash file: " + MACL.parseError(err);
+      out.textContent = "Could not store file: " + MACL.parseError(err);
     }
   });
 
@@ -120,16 +138,37 @@ MACL_UI.ready(async () => {
   const threshold = cfg.ENDORSEMENT_THRESHOLD; // approve at 2
 
   // Derive a request's status from its on-chain state.
+  // Lifecycle: PENDING -> APPROVED (2-of-3) -> SPENT (requester pins the receipt).
   function statusOf(r) {
+    if (r.req.spent) return "SPENT";
     if (r.req.approved) return "APPROVED";
     // With 3 parties and a 2-of-3 rule, 2+ declines makes approval impossible.
     if (Number(r.declines) > total - threshold) return "REJECTED";
     return "PENDING";
   }
   const statusPill = (s) => {
-    const cls = { APPROVED: "status-pill-approved", PENDING: "status-pill-pending", REJECTED: "status-pill-rejected" }[s];
+    const cls = { APPROVED: "status-pill-approved", PENDING: "status-pill-pending", REJECTED: "status-pill-rejected", SPENT: "status-pill-spent" }[s];
     return `<span class="${cls} px-3 py-1 rounded-full text-[10px] font-bold">${s}</span>`;
   };
+
+  // Integrity badge — single-node confirmation locally; cross-node agreement on Besu.
+  function badgeFor(integ) {
+    if (!integ || !integ.ok) {
+      return `<span class="inline-flex items-center gap-1 text-xs text-error" title="${MACL.esc(integ ? integ.detail : "unverifiable")}"><span class="material-symbols-outlined text-sm">error</span>${MACL.esc(integ ? integ.label : "Unverifiable")}</span>`;
+    }
+    if (integ.nodes) {
+      const { agree, total: t } = integ.nodes;
+      const all = agree === t, maj = agree >= 2; // 2-of-3 majority
+      const cls = all ? "text-primary" : maj ? "text-amber-600" : "text-error";
+      const icon = all ? "verified" : maj ? "warning" : "error";
+      const text = all ? `verified across ${t} nodes` : `${agree} of ${t} nodes agree`;
+      const detail = all
+        ? "All three nodes hold an identical copy of this request."
+        : `Only ${agree} of ${t} nodes hold this request — the rest are out of sync or unreachable. The 2-of-3 majority record stands.`;
+      return `<span class="inline-flex items-center gap-1 text-xs ${cls}" title="${MACL.esc(detail)}"><span class="material-symbols-outlined text-sm">${icon}</span>${text}</span>`;
+    }
+    return `<span class="inline-flex items-center gap-1 text-xs ${integ.locked ? "text-primary" : "text-on-surface-variant"}" title="${MACL.esc(integ.detail)}"><span class="material-symbols-outlined text-sm">${integ.locked ? "verified" : "schedule"}</span>${MACL.esc(integ.label)}</span>`;
+  }
 
   async function renderRequests() {
     const acting = MACL.roleMeta();
@@ -139,20 +178,24 @@ MACL_UI.ready(async () => {
 
     const body = document.getElementById("sp-rows");
     if (!requests.length) {
-      body.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">No spend requests yet. The NGO can raise one above.</td></tr>`;
+      body.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">No spend requests yet — sign in as the NGO to raise one above (the other two organisations then approve it).</td></tr>`;
       return;
     }
     const actingLabel = acting.label;
+
+    // BL-8: which agreements are failing targets — for a per-row, non-blocking flag.
+    const agIds = [...new Set(requests.map((r) => r.req.agreementId.toString()))];
+    const failFlags = await Promise.all(agIds.map((id) => MACL.hasFailingRecords(id)));
+    const failingByAgreement = Object.fromEntries(agIds.map((id, i) => [id, failFlags[i]]));
 
     // Build each row (integrity badge needs an await, so map → Promise.all).
     const html = await Promise.all(requests.map(async (r) => {
       const id = r.req.id.toString();
       const s = statusOf(r);
       const count = Number(r.count);
+      const progFailing = failingByAgreement[r.req.agreementId.toString()];
       const integ = await MACL.verifyRecord({ kind: "spend", id });
-      const badge = integ.ok
-        ? `<span class="inline-flex items-center gap-1 text-xs ${integ.locked ? "text-primary" : "text-on-surface-variant"}" title="${MACL.esc(integ.detail)}"><span class="material-symbols-outlined text-sm">${integ.locked ? "verified" : "schedule"}</span>${MACL.esc(integ.label)}</span>`
-        : `<span class="inline-flex items-center gap-1 text-xs text-error" title="${MACL.esc(integ.detail)}"><span class="material-symbols-outlined text-sm">error</span>${MACL.esc(integ.label)}</span>`;
+      const badge = badgeFor(integ);
 
       // 2-of-3 progress meter
       const pct = Math.min(100, Math.round((count / threshold) * 100));
@@ -168,13 +211,13 @@ MACL_UI.ready(async () => {
         else if (r.endorsedByActing) action = `<span class="text-[10px] text-on-surface-variant">${MACL.esc(actingLabel)} endorsed</span>`;
         else if (r.declinedByActing) action = `<span class="text-[10px] text-error">${MACL.esc(actingLabel)} declined</span>`;
         else action = `<div class="flex gap-1 no-print">
-<button data-endorse="${id}" data-perm="spend.endorse" onclick="event.stopPropagation()" class="bg-primary text-white px-2.5 py-1 rounded text-xs font-semibold hover:opacity-90 active:scale-95 transition-all">Endorse</button>
-<button data-decline="${id}" data-perm="spend.decline" onclick="event.stopPropagation()" class="border border-error text-error px-2.5 py-1 rounded text-xs font-semibold hover:bg-error hover:text-white active:scale-95 transition-all">Decline</button>
+<button data-endorse="${id}" data-perm="spend.endorse" data-help="endorse" onclick="event.stopPropagation()" class="bg-primary text-white px-2.5 py-1 rounded text-xs font-semibold hover:opacity-90 active:scale-95 transition-all">Endorse</button>
+<button data-decline="${id}" data-perm="spend.decline" data-help="decline" onclick="event.stopPropagation()" class="border border-error text-error px-2.5 py-1 rounded text-xs font-semibold hover:bg-error hover:text-white active:scale-95 transition-all">Decline</button>
 </div>`;
       }
 
       const summary = `<tr class="hover:bg-surface-container-low cursor-pointer transition-colors group" onclick="toggleRow('spend-${id}')">
-<td class="px-6 py-5"><div class="flex flex-col"><span class="font-semibold text-on-surface">Request #${id}</span><span class="text-xs text-on-surface-variant font-code-metadata">Agreement #${r.req.agreementId}</span></div></td>
+<td class="px-6 py-5"><div class="flex flex-col"><span class="font-semibold text-on-surface">Request #${id}</span><span class="text-xs text-on-surface-variant font-code-metadata">Agreement #${r.req.agreementId}</span>${progFailing ? `<span class="text-[10px] text-amber-600 mt-0.5" title="This programme has a failing compliance record. Spend is not blocked; the 2-of-3 approval decides.">⚠ programme failing targets</span>` : ""}</div></td>
 <td class="px-6 py-5 text-on-surface-variant">${MACL.esc(r.req.purpose)}</td>
 <td class="px-6 py-5 text-right font-code-metadata text-sm">${MACL.fmtMoney(r.req.amount)}</td>
 <td class="px-6 py-5">${badge}</td>
@@ -189,11 +232,11 @@ MACL_UI.ready(async () => {
 <span class="text-[10px] text-on-surface-variant block mb-1">SUPPORTING-DOCUMENT FINGERPRINT (SHA-256)</span>
 <div class="font-code-metadata text-[11px] break-all text-on-surface">${MACL.esc(r.req.documentHash)}</div>
 <div class="mt-3 flex flex-wrap items-center gap-2">
-<label class="text-xs text-on-surface-variant">Verify a file against this:</label>
-<input type="file" data-verify="${id}" class="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary-container file:text-white file:px-2 file:py-1 file:text-[11px]"/>
+<a href="${MACL.documentUrl(r.req.documentHash)}" target="_blank" rel="noopener" class="text-xs text-primary font-semibold hover:underline">View</a>
+<button type="button" data-verify-stored="${r.req.documentHash}" data-out="verify-out-${id}" class="text-xs text-primary font-semibold hover:underline">Verify</button>
 <span class="text-xs font-semibold" id="verify-out-${id}"></span>
 </div>
-<p class="text-[10px] text-on-surface-variant mt-2">A match proves the document has not been altered or swapped since approval. It does <b>not</b> prove the document was genuine in the first place.</p>
+<p class="text-[10px] text-on-surface-variant mt-2">Verify re-hashes the stored file on the server against the on-chain hash: a match proves it is unchanged since recorded — it does <b>not</b> prove the document was genuine in the first place.</p>
 </div>`
         : `<div class="bg-surface-container-lowest p-4 border border-outline-variant rounded text-xs text-on-surface-variant">No supporting document attached to this request.</div>`;
 
@@ -203,6 +246,36 @@ MACL_UI.ready(async () => {
         : s === "REJECTED"
           ? "Declined by enough parties that 2-of-3 approval can no longer be reached."
           : `${remaining} more endorsement${remaining === 1 ? "" : "s"} needed to approve (2-of-3). A party may endorse or decline once.`;
+
+      // BL-7: post-approval settlement — pin the actual receipt's SHA-256 (requester only),
+      // then anyone can re-verify a file against it. Lifecycle: approved -> spent.
+      let settlementBlock = "";
+      if (r.req.spent) {
+        settlementBlock = `<div class="mt-8">
+<h4 class="text-label-caps text-on-surface-variant border-b border-outline-variant pb-2">SETTLEMENT — RECEIPT (SPENT ${MACL.esc(MACL.fmtTs(r.req.spentAt))})</h4>
+<div class="bg-surface-container-lowest p-4 border border-outline-variant rounded mt-3">
+<span class="text-[10px] text-on-surface-variant block mb-1">RECEIPT FINGERPRINT (SHA-256)</span>
+<div class="font-code-metadata text-[11px] break-all text-on-surface">${MACL.esc(r.req.receiptHash)}</div>
+<div class="mt-3 flex flex-wrap items-center gap-2">
+<a href="${MACL.documentUrl(r.req.receiptHash)}" target="_blank" rel="noopener" class="text-xs text-primary font-semibold hover:underline">View</a>
+<button type="button" data-verify-stored="${r.req.receiptHash}" data-out="verify-receipt-out-${id}" class="text-xs text-primary font-semibold hover:underline">Verify</button>
+<span class="text-xs font-semibold" id="verify-receipt-out-${id}"></span>
+</div>
+<p class="text-[10px] text-on-surface-variant mt-2">Verify re-hashes the stored receipt on the server against the on-chain hash: a match proves it is unchanged since recorded.</p>
+</div>
+</div>`;
+      } else if (s === "APPROVED" && isSubmitter) {
+        settlementBlock = `<div class="mt-8 no-print">
+<h4 class="text-label-caps text-on-surface-variant border-b border-outline-variant pb-2">SETTLEMENT — RECORD THE RECEIPT</h4>
+<p class="text-xs text-on-surface-variant mt-2">Approved 2-of-3. After the funds move through normal banking, pin the ACTUAL receipt's fingerprint to close this out. The file is hashed in your browser — only the hash goes on-chain.</p>
+<div class="mt-3 flex flex-wrap items-center gap-2">
+<input type="file" data-receipt="${id}" class="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary-container file:text-white file:px-2 file:py-1 file:text-[11px]"/>
+<button data-mark-spent="${id}" class="bg-primary text-white px-3 py-1.5 rounded text-xs font-semibold hover:opacity-90 active:scale-95 transition-all">Mark as spent</button>
+</div>
+</div>`;
+      } else if (s === "APPROVED") {
+        settlementBlock = `<div class="mt-8"><p class="text-xs text-on-surface-variant">Approved — awaiting <span class="font-semibold">${MACL.esc(MACL.labelForAddress(r.req.requester))}</span> to record the receipt.</p></div>`;
+      }
 
       const expand = `<tr class="hidden bg-surface-container-low/50" id="spend-${id}">
 <td class="px-8 py-6 border-l-4 ${r.req.approved ? "border-primary" : s === "REJECTED" ? "border-error" : "border-outline-variant"}" colspan="7">
@@ -218,6 +291,7 @@ MACL_UI.ready(async () => {
 ${docBlock}
 </div>
 </div>
+${settlementBlock}
 </td>
 </tr>`;
       return summary + expand;
@@ -231,24 +305,27 @@ ${docBlock}
     body.querySelectorAll("button[data-decline]").forEach((b) =>
       b.onclick = (e) => { e.stopPropagation(); act("declineSpend", b.getAttribute("data-decline")); });
 
-    // wire the "Verify document" file inputs
-    body.querySelectorAll("input[data-verify]").forEach((inp) =>
-      inp.onchange = async (e) => {
-        e.stopPropagation();
-        const id = inp.getAttribute("data-verify");
-        const out = document.getElementById("verify-out-" + id);
-        const req = requests.find((r) => r.req.id.toString() === id);
-        const file = inp.files[0];
-        if (!file || !req) return;
-        out.textContent = "Checking…"; out.className = "text-xs font-semibold text-on-surface-variant";
-        try {
-          const v = await MACL.verifyDocument(file, req.req.documentHash);
-          if (v.match) { out.textContent = "✓ Document verified — matches the ledger"; out.className = "text-xs font-semibold text-green-700"; }
-          else { out.textContent = "✗ Does not match the ledger"; out.className = "text-xs font-semibold text-error"; }
-        } catch (err) {
-          out.textContent = MACL.parseError(err); out.className = "text-xs font-semibold text-error";
-        }
-      });
+    // wire "Mark as spent" (BL-7) — requester pins the actual receipt's hash.
+    body.querySelectorAll("button[data-mark-spent]").forEach((b) =>
+      b.onclick = (e) => { e.stopPropagation(); markSpent(b.getAttribute("data-mark-spent")); });
+
+    // wire the one-click View/Verify controls for supporting docs + receipts (BL-14)
+    MACL_UI.wireVerify(body);
+  }
+
+  // Hash the chosen receipt file in the browser, then pin its SHA-256 on-chain.
+  async function markSpent(id) {
+    const inp = document.querySelector(`input[data-receipt="${id}"]`);
+    const file = inp && inp.files[0];
+    if (!file) return MACL.toast("No receipt", "Choose the receipt file first.", "err");
+    // Store the receipt; the server returns its SHA-256, which goes on-chain.
+    let receiptHash;
+    try { receiptHash = (await MACL.uploadDocument(file)).hash; }
+    catch (err) { return MACL.toast("Could not store receipt", MACL.parseError(err), "err"); }
+    const { compliance } = MACL.contracts(MACL.getRole());
+    try { await MACL.withTx(`Mark spend #${id} as spent`, () => compliance.markSpent(BigInt(id), receiptHash)); }
+    catch (_) { return; }
+    await loadAll();
   }
 
   async function act(method, id) {
@@ -285,7 +362,7 @@ ${docBlock}
     if (!purpose) return MACL.toast("No purpose", "Describe what the spend is for.", "err");
     if (!validateAmount()) return MACL.toast("Over budget", "Amount exceeds the remaining budget.", "err");
 
-    const docHash = pendingHash || ethers.ZeroHash; // no file → zero hash (evidence optional)
+    const docHash = pendingHash || null; // no file → API stores a zero hash (evidence optional)
     const { compliance } = MACL.contracts(MACL.getRole());
     try {
       await MACL.withTx("Raise spend request", () =>

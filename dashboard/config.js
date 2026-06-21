@@ -1,116 +1,40 @@
 /*
  * MACL Dashboard — configuration
  * ------------------------------------------------------------------
- * The ONE place that holds everything environment-specific. When you
- * later swap the local Hardhat node for the Besu QBFT network, you
- * only edit this file — the rest of the dashboard stays the same.
+ * Three-tier: the browser talks ONLY to the Tier-2 REST API (api/), which holds
+ * the signer keys server-side and brokers every call to the Besu chain. There
+ * are NO private keys, RPC URLs, contract addresses or ABIs in the browser any
+ * more — those all live server-side now (see api/.env).
  *
  * Loaded as a plain <script> (no modules/bundler), so it just attaches
  * a single global object: window.MACL_CONFIG.
  */
 window.MACL_CONFIG = (function () {
-  // --- network toggle -----------------------------------------------------
-  // Flip this ONE value to point the whole dashboard at a different chain:
-  //   "local" — the single Hardhat node (dev/demo default)
-  //   "besu"  — the real 3-node Hyperledger Besu QBFT network (see RUN-BESU.md)
-  // Everything else (ABIs, roles, permissions) is identical across networks.
-  const NETWORK = "besu"; // "local" | "besu"
-
-  // Per-network RPC endpoint + deployed contract addresses. Both sets are the
-  // DETERMINISTIC addresses you get from a fresh deploy in declaration order
-  // (Agreement → Compliance → Verification). They differ between networks only
-  // because the deployer account differs (Hardhat acct #0 vs the Besu genesis
-  // deployer 0xfe3b…). If you deploy onto a chain that is NOT fresh, paste the
-  // addresses printed by the deploy script over the matching set below.
-  const NETWORKS = {
-    local: {
-      RPC_URL: "http://127.0.0.1:8545",
-      ADDRESSES: {
-        Agreement:    "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-        Compliance:   "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-        Verification: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-      },
-    },
-    besu: {
-      // Node-1's RPC. The browser only needs ONE node to read/write; the other
-      // two are listed in NODES below for the Part 4 cross-node integrity panel.
-      RPC_URL: "http://127.0.0.1:8545",
-      ADDRESSES: {
-        Agreement:    "0x42699A7612A82f1d9C36148af9C77354759b210b",
-        Compliance:   "0xa50a51c09a5c451C52BB714527E1974b686D8e77",
-        Verification: "0x9a3DBCa554e9f6b9257aAa24010DA8377C57c17e",
-      },
-    },
-  };
-
-  // The three Besu validator RPC endpoints (host ports from blockchain/docker-compose.yml).
-  // Used later by the Part 4 panel that compares each node's view of the ledger.
-  const NODES = [
-    { label: "Node-1 (NGO)",      url: "http://127.0.0.1:8545" },
-    { label: "Node-2 (Ministry)", url: "http://127.0.0.1:8546" },
-    { label: "Node-3 (Donor)",    url: "http://127.0.0.1:8547" },
-  ];
-
-  const active = NETWORKS[NETWORK];
+  // Base URL of the REST API. Same host, port 3001 by default (see api/.env).
+  const API_BASE = "http://127.0.0.1:3001/api";
 
   return {
-  // Which network is live, and the resolved endpoint/addresses for it.
-  NETWORK,
-  NODES,
+  // The one endpoint the whole dashboard talks to.
+  API_BASE,
 
-  // JSON-RPC endpoint of the chain the browser talks to directly.
-  RPC_URL: active.RPC_URL,
-
-  // The deployed contract addresses for the active network.
-  ADDRESSES: active.ADDRESSES,
-
-  // Where to fetch each contract's ABI. These paths are served by a
-  // static server running from the REPO ROOT (macl/), so the browser
-  // can reach the compiler artifacts that live above the dashboard.
-  ABI_PATHS: {
-    Agreement:    "/contracts/artifacts/contracts/AgreementContract.sol/AgreementContract.json",
-    Compliance:   "/contracts/artifacts/contracts/ComplianceEvaluationContract.sol/ComplianceEvaluationContract.json",
-    Verification: "/contracts/artifacts/contracts/VerificationWorkflowContract.sol/VerificationWorkflowContract.json",
-  },
-
-  // Role → Hardhat dev account. Each role view signs as its own
-  // address, which is what makes the 2-of-3 endorsement meaningful
-  // (two DISTINCT accounts must endorse a record).
-  //
-  // SECURITY NOTE: these are the WELL-KNOWN, PUBLIC Hardhat test keys.
-  // They exist only on the local dev chain and control no real funds.
-  // Never reuse this pattern with a real private key.
+  // Role → display identity (public info only — NO keys in the browser). The
+  // acting role comes from LOGIN (BL-13): the API issues a JWT carrying the role,
+  // and maps the role to its server-side signing key. These entries are used for
+  // display + labelling on-chain addresses, and for the login dropdown.
   ROLES: {
-    donor: {
-      label: "Donor-Admin",
-      short: "Donor",
-      address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      key: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-    },
-    ngo: {
-      label: "NGO",
-      short: "NGO",
-      address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-      key: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
-    },
-    audit: {
-      label: "Audit",
-      short: "Govt",
-      address: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
-      key: "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
-    },
+    donor: { label: "Donor-Admin", short: "Donor", address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" },
+    ngo:   { label: "NGO",         short: "NGO",   address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" },
+    audit: { label: "Audit",       short: "Govt",  address: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC" },
   },
 
-  // Default role the dashboard opens with (overridden by localStorage
-  // once the user picks a role — see chain.js getRole/setRole).
-  DEFAULT_ROLE: "donor",
-
-  // --- role permissions (UI gating only) ---------------------------------
-  // The contracts only gate by `creator`; this map enforces the real-world
-  // division of duties in the DASHBOARD so the demo shows each role acting
-  // as its own entity. Gating is at the ACTION level (not the page level):
-  // every role can SEE every page, only the allowed role can OPERATE a
-  // given write control. This is the ONE place to edit if the rules change.
+  // --- role permissions ---------------------------------------------------
+  // These rules are ENFORCED ON-CHAIN (the org registry + role gates in the
+  // contracts: only a Donor org creates agreements, only the NGO reports /
+  // requests spend, only an agreement's signatories endorse/decline). This map
+  // MIRRORS those rules in the UI so a denied action is greyed out before the
+  // user pays for a transaction that would revert. Gating is at the ACTION
+  // level (not the page level): every role can SEE every page, only the allowed
+  // role can OPERATE a given write control. Keep this in sync with the contracts.
   //
   //   agreement.create / addTarget / finalise  -> Donor-Admin only
   //   budget.set                               -> Donor-Admin only

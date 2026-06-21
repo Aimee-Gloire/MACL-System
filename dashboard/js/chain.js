@@ -1,109 +1,177 @@
 /*
- * MACL Dashboard — chain.js
+ * MACL Dashboard — chain.js  (three-tier: browser → REST API → Besu)
  * ------------------------------------------------------------------
- * The bridge between the browser and the blockchain. There is NO API:
- * this file uses ethers.js to talk to the deployed contracts directly.
+ * The browser NO LONGER talks to the chain or holds any private keys. This file
+ * is now a thin client over the Tier-2 REST API (api/), which holds the signer
+ * keys server-side, signs every transaction, and proxies the cross-node
+ * integrity reads (the validators' JSON-RPC is never exposed to the browser).
  *
- * Shared by every page. Exposes a single global, window.MACL, with:
- *   loadAbis()              fetch + cache the 3 contract ABIs
- *   contracts(role)         contract instances (signer-bound if role)
- *   getRole()/setRole()     which Hardhat account is "acting" (persisted)
- *   roleMeta(role)          {label,short,address,key} for a role
- *   withTx(label, fn)       send → wait → toast (surfaces revert reasons)
- *   fetchAgreements()       all agreements (+ targets), newest first
- *   fetchRecords()          all compliance records (+ target + endorsement state)
- *   helpers                 shortAddr, fmtResult, fmtTs, toUnix, fmtHash, esc…
- *   ping()/verifyDeployed() health checks for the connection light
+ * The public surface (window.MACL) is unchanged so the page views keep working:
+ *   contracts(role)         per-action write handles (each POSTs to the API)
+ *   fetchAgreements/Records/SpendRequests   reads (GET the API)
+ *   verifyRecord/getNodeStates              integrity (proxied by the API)
+ *   login/logout/isLoggedIn/getRole         session state (BL-13; role from JWT)
+ *   withTx, toast, formatting helpers       unchanged
  */
 window.MACL = (function () {
   const cfg = window.MACL_CONFIG;
-  const ROLE_KEY = "macl.role"; // localStorage key for the acting role
+  const ROLE_KEY = "macl.role";     // the logged-in org's role
+  const TOKEN_KEY = "macl.token";   // the session JWT
+  const API = cfg.API_BASE;         // e.g. "http://127.0.0.1:3001/api"
 
-  // One read provider for the whole app (used for reads + event logs).
-  const provider = new ethers.JsonRpcProvider(cfg.RPC_URL);
-
-  let abis = null; // { Agreement, Compliance, Verification }
-
-  // -------------------------------------------------- ABIs
-  async function loadAbis() {
-    if (abis) return abis;
-    const names = Object.keys(cfg.ABI_PATHS);
-    const loaded = await Promise.all(
-      names.map(async (name) => {
-        const res = await fetch(cfg.ABI_PATHS[name]);
-        if (!res.ok) {
-          throw new Error(
-            `Could not load ABI for ${name} (HTTP ${res.status}). ` +
-            `Are you serving from the repo root?`
-          );
-        }
-        return [name, (await res.json()).abi];
-      })
-    );
-    abis = Object.fromEntries(loaded);
-    return abis;
+  // -------------------------------------------------- session (BL-13)
+  function token() { return localStorage.getItem(TOKEN_KEY); }
+  function isLoggedIn() { return !!token(); }
+  function authHeaders(extra) {
+    const t = token();
+    return Object.assign({}, extra || {}, t ? { authorization: `Bearer ${t}` } : {});
+  }
+  function clearSession() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ROLE_KEY);
+  }
+  // On any 401, the session is gone/expired — drop it and bounce to login.
+  function onUnauthorized() {
+    clearSession();
+    if (!/login\.html$/.test(location.pathname)) location.href = "login.html";
   }
 
-  // -------------------------------------------------- signers / contracts
-  // Wrap the wallet in a NonceManager so back-to-back writes from the same
-  // account (e.g. createAgreement → addTarget → addTarget) get sequential
-  // nonces instead of racing and silently reverting the later txs.
-  function signerFor(role) {
-    const r = cfg.ROLES[role];
-    if (!r) throw new Error(`Unknown role: ${role}`);
-    return new ethers.NonceManager(new ethers.Wallet(r.key, provider));
+  // -------------------------------------------------- HTTP helpers
+  async function apiError(res) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); if (j && j.error) msg = j.error; } catch (_) {}
+    const e = new Error(msg);
+    e.shortMessage = msg;
+    return e;
+  }
+  async function apiGet(path) {
+    const res = await fetch(API + path, { headers: authHeaders() });
+    if (res.status === 401) onUnauthorized();
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+  async function apiPost(path, body) {
+    const res = await fetch(API + path, {
+      method: "POST",
+      headers: authHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify(body || {}),
+    });
+    if (res.status === 401) onUnauthorized();
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+  // POST a raw file body (binary) — used for the document store.
+  async function apiPostFile(path, file) {
+    const res = await fetch(API + path, {
+      method: "POST",
+      headers: authHeaders({ "content-type": file.type || "application/octet-stream" }),
+      body: file,
+    });
+    if (res.status === 401) onUnauthorized();
+    if (!res.ok) throw await apiError(res);
+    return res.json();
   }
 
-  // Pass a role for write-capable (signer-bound) contracts; pass nothing
-  // for read-only (provider-bound) contracts.
+  // Log in with org credentials → store the JWT + role. Uses a bare fetch so a
+  // 401 here (bad password) surfaces to the login form instead of redirecting.
+  async function login(username, password) {
+    const res = await fetch(API + "/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) throw await apiError(res);
+    const data = await res.json();
+    localStorage.setItem(TOKEN_KEY, data.token);
+    localStorage.setItem(ROLE_KEY, data.role);
+    return data;
+  }
+  function logout() { clearSession(); location.href = "login.html"; }
+
+  // -------------------------------------------------- write handles
+  // Returns objects whose methods mirror the original contract-call shape but POST
+  // to the API. Each returns a "pseudo-tx" { hash, blockNumber, …, wait() } so
+  // the existing `withTx(label, () => handle.method(...))` call sites keep working.
+  function postTx(path, body) {
+    return apiPost(path, body).then((res) => ({ ...res, wait: async () => res }));
+  }
   function contracts(role) {
-    if (!abis) throw new Error("ABIs not loaded — call MACL.loadAbis() first");
-    const runner = role ? signerFor(role) : provider;
+    const needRole = () => { if (!role) throw new Error("No acting role — sign-in required for writes"); return role; };
     return {
-      agreement: new ethers.Contract(cfg.ADDRESSES.Agreement, abis.Agreement, runner),
-      compliance: new ethers.Contract(cfg.ADDRESSES.Compliance, abis.Compliance, runner),
-      verification: new ethers.Contract(cfg.ADDRESSES.Verification, abis.Verification, runner),
+      agreement: {
+        createAgreement: (startDate, endDate, signatories) =>
+          postTx("/agreements", { role: needRole(), startDate: String(startDate), endDate: String(endDate), signatories }),
+        addTarget: (id, indicator, threshold, unit, deadline) =>
+          postTx(`/agreements/${id}/targets`, { role: needRole(), indicator, threshold: String(threshold), unit, deadline: String(deadline) }),
+        finaliseAgreement: (id) =>
+          postTx(`/agreements/${id}/finalise`, { role: needRole() }),
+        setBudget: (id, amount) =>
+          postTx(`/agreements/${id}/budget`, { role: needRole(), amount: String(amount) }),
+      },
+      compliance: {
+        submitReport: (id, idx, val) =>
+          postTx("/reports", { role: needRole(), agreementId: String(id), targetIndex: String(idx), value: String(val) }),
+        "submitReport(uint256,uint256,uint256,bytes32)": (id, idx, val, documentHash) =>
+          postTx("/reports", { role: needRole(), agreementId: String(id), targetIndex: String(idx), value: String(val), documentHash }),
+        createSpendRequest: (id, amount, purpose, documentHash) =>
+          postTx("/spend", { role: needRole(), agreementId: String(id), amount: String(amount), purpose, documentHash: documentHash || null }),
+        markSpent: (id, receiptHash) =>
+          postTx(`/spend/${id}/spent`, { role: needRole(), receiptHash }),
+      },
+      verification: {
+        endorse: (id) => postTx(`/records/${id}/endorse`, { role: needRole() }),
+        decline: (id) => postTx(`/records/${id}/decline`, { role: needRole() }),
+        markUnverified: (id) => postTx(`/records/${id}/expire`, { role: needRole() }),
+        endorseSpend: (id) => postTx(`/spend/${id}/endorse`, { role: needRole() }),
+        declineSpend: (id) => postTx(`/spend/${id}/decline`, { role: needRole() }),
+      },
     };
   }
 
-  // -------------------------------------------------- role state (persisted)
+  // -------------------------------------------------- role state (from the session)
+  // The acting role is whatever org is LOGGED IN (set by login()); there is no
+  // in-browser switcher any more — acting as another org means logging in as it.
   function getRole() {
     const saved = localStorage.getItem(ROLE_KEY);
-    return cfg.ROLES[saved] ? saved : cfg.DEFAULT_ROLE;
+    return cfg.ROLES[saved] ? saved : null;
   }
-  function setRole(role) {
-    if (!cfg.ROLES[role]) throw new Error(`Unknown role: ${role}`);
-    localStorage.setItem(ROLE_KEY, role);
-  }
-  function roleMeta(role) { return cfg.ROLES[role || getRole()]; }
+  function roleMeta(role) { return cfg.ROLES[role || getRole()] || null; }
 
-  // Can the given role (default: the acting role) perform this action?
-  // Reads the PERMISSIONS map in config.js. UI-only — the chain still
-  // enforces its own rules independently.
+  // UI gating: mirrors the on-chain role rules so a denied control is greyed out
+  // before the user triggers a request the contract (and the API) would reject.
   function can(actionKey, role) {
     const perms = (cfg.PERMISSIONS && cfg.PERMISSIONS[role || getRole()]) || [];
     return perms.includes(actionKey);
   }
 
-  // -------------------------------------------------- health checks
-  async function ping() { return provider.getBlockNumber(); }
-  async function getChainId() { return (await provider.getNetwork()).chainId; }
+  function metaForAddress(addr) {
+    const hit = Object.values(cfg.ROLES).find((r) => r.address.toLowerCase() === String(addr).toLowerCase());
+    return hit || { label: shortAddr(addr), short: "?", address: addr };
+  }
+
+  async function hasFailingRecords(agreementId) {
+    try { const r = await apiGet(`/agreements/${agreementId}/failing`); return !!r.hasFailing; }
+    catch (_) { return false; }
+  }
+
+  // -------------------------------------------------- health checks (via API)
+  async function ping() {
+    const h = await apiGet("/health");
+    if (!h.ok) throw new Error(h.error || "chain unreachable");
+    return h.block;
+  }
+  async function getChainId() { return (await apiGet("/health")).chainId; }
   async function verifyDeployed() {
-    const out = {};
-    for (const [name, addr] of Object.entries(cfg.ADDRESSES)) {
-      const code = await provider.getCode(addr);
-      out[name] = !!code && code !== "0x";
-    }
-    return out;
+    const h = await apiGet("/health").catch(() => ({ ok: false }));
+    const ok = !!h.ok;
+    return { Agreement: ok, Compliance: ok, Verification: ok };
   }
 
   // -------------------------------------------------- formatting helpers
   function shortAddr(a) { return a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—"; }
   function labelForAddress(addr) {
     if (!addr) return "—";
-    const hit = Object.values(cfg.ROLES).find(
-      (r) => r.address.toLowerCase() === addr.toLowerCase()
-    );
+    const hit = Object.values(cfg.ROLES).find((r) => r.address.toLowerCase() === addr.toLowerCase());
     return hit ? hit.label : shortAddr(addr);
   }
   function fmtResult(n) { return cfg.RESULT_LABELS[Number(n)] || "PENDING"; }
@@ -120,9 +188,7 @@ window.MACL = (function () {
     if (!h || /^0x0{64}$/.test(h)) return "—";
     return `${h.slice(0, 10)}…${h.slice(-6)}`;
   }
-  // A documentHash of all-zeros means "no evidence attached".
   function hasHash(h) { return !!h && !/^0x0{64}$/.test(h); }
-  // Format a money figure with thousands separators + the configured unit (e.g. "1,000,000 RWF").
   function fmtMoney(v) {
     try { return `${BigInt(v).toLocaleString("en-US")} ${cfg.MONEY_UNIT}`; }
     catch (_) { return `${v} ${cfg.MONEY_UNIT}`; }
@@ -162,17 +228,15 @@ window.MACL = (function () {
 
   function parseError(err) {
     return (
-      (err && err.revert && err.revert.args && err.revert.args[0]) ||
-      (err && err.reason) ||
       (err && err.shortMessage) ||
-      (err && err.info && err.info.error && err.info.error.message) ||
+      (err && err.reason) ||
       (err && err.message) ||
       String(err)
     );
   }
 
-  // Run a state-changing call: send, wait for mining, toast each step,
-  // surface revert reasons. `fn` returns the contract method promise.
+  // Run a state-changing call through the API: send, surface each step, toast.
+  // `fn` returns the pseudo-tx promise (from a contracts(role) handle).
   async function withTx(label, fn) {
     try {
       const tx = await fn();
@@ -186,152 +250,96 @@ window.MACL = (function () {
     }
   }
 
-  // -------------------------------------------------- event helpers
-  async function getLogs(contract, eventName) {
-    return contract.queryFilter(contract.filters[eventName]());
-  }
-
-  // -------------------------------------------------- high-level fetchers
-  // Every agreement (+ its targets), newest first. Shared by Overview,
-  // Agreements, Reports.
+  // -------------------------------------------------- high-level fetchers (API)
   async function fetchAgreements() {
-    const { agreement } = contracts();
-    const logs = await getLogs(agreement, "AgreementCreated");
-    const ids = [...new Set(logs.map((l) => l.args.id.toString()))];
-    const rows = [];
-    for (const idStr of ids) {
-      const id = BigInt(idStr);
-      const a = await agreement.getAgreement(id);
-      const count = await agreement.targetCount(id);
-      const targets = [];
-      for (let i = 0n; i < count; i++) targets.push(await agreement.getTarget(id, i));
-      // Budget figures live on the agreement struct; remaining = budget - committedSpend.
-      const budget = a.budget;
-      const committed = a.committedSpend;
-      const remaining = budget - committed;
-      rows.push({ id: idStr, a, targets, finalised: a.finalised, budget, committed, remaining });
+    const rows = await apiGet("/agreements");
+    for (const r of rows) {
+      // money fields come as decimal strings; views compare them with BigInt.
+      r.budget = BigInt(r.budget);
+      r.committed = BigInt(r.committed);
+      r.remaining = BigInt(r.remaining);
+      r.a.budget = BigInt(r.a.budget);
+      r.a.committedSpend = BigInt(r.a.committedSpend);
     }
-    rows.sort((x, y) => Number(y.id) - Number(x.id));
     return rows;
   }
 
-  // Every spend request (+ its 2-of-3 endorsement/decline state, and whether
-  // `forAddr` has endorsed/declined). Shared by the Budget & Spend page.
   async function fetchSpendRequests(forAddr) {
-    const { compliance, verification } = contracts();
-    const logs = await getLogs(compliance, "SpendRequested");
-    const ids = [...new Set(logs.map((l) => l.args.requestId.toString()))];
-    const rows = [];
-    for (const idStr of ids) {
-      const id = BigInt(idStr);
-      const req = await compliance.getSpendRequest(id);
-      const count = await verification.spendEndorsementCount(id);
-      const declines = await verification.spendDeclineCount(id);
-      const endorsedByActing = forAddr ? await verification.hasEndorsedSpend(id, forAddr) : false;
-      const declinedByActing = forAddr ? await verification.hasDeclinedSpend(id, forAddr) : false;
-      rows.push({ req, count, declines, endorsedByActing, declinedByActing });
+    const rows = await apiGet("/spend");
+    const acting = (forAddr || "").toLowerCase();
+    for (const r of rows) {
+      r.endorsedByActing = !!acting && (r.endorsers || []).some((a) => a.toLowerCase() === acting);
+      r.declinedByActing = !!acting && (r.decliners || []).some((a) => a.toLowerCase() === acting);
     }
-    rows.sort((a, b) => Number(b.req.id) - Number(a.req.id));
     return rows;
   }
 
-  // Every compliance record (+ its target, endorsement count, finalised
-  // block hash, and whether `forAddr` has endorsed it). Shared by
-  // Overview, Audit, Node Status, Reports.
   async function fetchRecords(forAddr) {
-    const { compliance, verification, agreement } = contracts();
-    const logs = await getLogs(compliance, "RecordSubmitted");
-    const ids = [...new Set(logs.map((l) => l.args.recordId.toString()))];
-    const rows = [];
-    for (const idStr of ids) {
-      const id = BigInt(idStr);
-      const rec = await compliance.getRecord(id);
-      const t = await agreement.getTarget(rec.agreementId, rec.targetIndex);
-      const count = await verification.endorsementCount(id);
-      const declines = await verification.declineCount(id);
-      const blockHash = await verification.finalisedBlockHash(id);
-      const endorsedByActing = forAddr ? await verification.hasEndorsed(id, forAddr) : false;
-      const declinedByActing = forAddr ? await verification.hasDeclined(id, forAddr) : false;
-      rows.push({ rec, target: t, count, declines, blockHash, endorsedByActing, declinedByActing });
+    const rows = await apiGet("/records");
+    const acting = (forAddr || "").toLowerCase();
+    for (const r of rows) {
+      const eAddrs = r.endorsers || [];
+      const dAddrs = r.decliners || [];
+      r.endorsedByActing = !!acting && eAddrs.some((a) => a.toLowerCase() === acting);
+      r.declinedByActing = !!acting && dAddrs.some((a) => a.toLowerCase() === acting);
+      // Audit view expects role-meta objects, not raw addresses.
+      r.endorsers = eAddrs.map(metaForAddress);
+      r.decliners = dAddrs.map(metaForAddress);
     }
-    rows.sort((a, b) => Number(b.rec.id) - Number(a.rec.id));
     return rows;
   }
 
-  // -------------------------------------------------- receipt fingerprints (SHA-256)
-  // Compute the SHA-256 of a file ENTIRELY IN THE BROWSER and return it as a
-  // bytes32 hex string. The file's bytes never leave the user's machine — only
-  // this 32-byte fingerprint is ever sent on-chain. (crypto.subtle needs a
-  // secure context; 127.0.0.1/localhost both qualify.)
-  async function hashFile(file) {
-    const buf = await file.arrayBuffer();
-    const digest = await crypto.subtle.digest("SHA-256", buf);
-    return "0x" + [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  // Recent blocks (number + tx count), for the Reports page strip.
+  async function recentBlocks(n) { return apiGet(`/blocks/recent?n=${n || 3}`); }
+
+  // Recent agreement lifecycle events, for the Agreements page ledger timeline.
+  async function fetchAgreementEvents(limit) { return apiGet(`/events/agreements?limit=${limit || 6}`); }
+
+  // -------------------------------------------------- documents (BL-12 / BL-14)
+  // The file's SHA-256 is computed SERVER-SIDE by the API (works over plain http
+  // on a real domain — no browser crypto.subtle). uploadDocument STORES the file
+  // and returns the hash to put on-chain; verifyStoredDocument re-hashes the
+  // STORED file server-side and compares to the on-chain hash (one-click verify).
+
+  // Store a file in the document store; returns { hash, size, contentType, filename, existed }.
+  async function uploadDocument(file) {
+    return apiPostFile(`/documents/upload?filename=${encodeURIComponent(file.name || "file")}`, file);
+  }
+  // Direct URL to download a stored file (the on-chain hash is the key). The
+  // session token rides as a query param so a plain <a href> download is
+  // authenticated (a link navigation can't set an Authorization header).
+  function documentUrl(hash) {
+    const t = token();
+    return `${API}/documents/${hash}${t ? `?token=${encodeURIComponent(t)}` : ""}`;
+  }
+  // Ask the server to re-hash the STORED file and compare to the on-chain hash.
+  async function verifyStoredDocument(hash) {
+    try { return await apiGet(`/documents/${hash}/verify`); }
+    catch (_) { return { stored: false, match: false }; }
   }
 
-  // Re-hash a file the user re-selects and compare it to the hash stored on-chain.
-  // Returns { match, computed, expected }. Used by the "Verify document" controls.
-  async function verifyDocument(file, onChainHash) {
-    const computed = await hashFile(file);
-    return {
-      match: computed.toLowerCase() === String(onChainHash || "").toLowerCase(),
-      computed,
-      expected: onChainHash,
-    };
-  }
+  // -------------------------------------------------- integrity (proxied by API)
+  async function getNodeStates() { return apiGet("/nodes"); }
 
-  // -------------------------------------------------- record integrity (extensible)
-  // ONE place the integrity badge calls. Today it confirms the record/request
-  // really exists on the ledger and is locked (finalised/approved), and reports
-  // whether it carries a document fingerprint. It returns a `nodes` field left
-  // null for now: in Part 4 the SAME function will additionally query every Besu
-  // node in cfg.NODES and fill `nodes` with the cross-node agreement — the badge
-  // needs no change.
-  //   ref = { kind: "spend" | "record", id }
+  // The ONE place the integrity badge calls. The API confirms the record/request
+  // is on the ledger and runs the cross-node comparison server-side, returning
+  // { ok, locked, label, detail, documentHash, hasDocument, nodes:{agree,total,…} }.
   async function verifyRecord(ref) {
-    const { compliance } = contracts();
-    try {
-      if (ref.kind === "spend") {
-        const r = await compliance.getSpendRequest(BigInt(ref.id));
-        if (r.id === 0n) return { ok: false, label: "Not on ledger", detail: "No such spend request.", nodes: null };
-        return {
-          ok: true,
-          locked: r.approved,
-          documentHash: r.documentHash,
-          hasDocument: hasHash(r.documentHash),
-          label: r.approved ? "On ledger · approved" : "On ledger · pending",
-          detail: r.approved
-            ? "Approved 2-of-3 and recorded immutably on the ledger."
-            : "Recorded on the ledger; awaiting 2-of-3 approval.",
-          nodes: null, // Part 4: cross-node comparison fills this in
-        };
-      }
-      const rec = await compliance.getRecord(BigInt(ref.id));
-      if (rec.id === 0n) return { ok: false, label: "Not on ledger", detail: "No such record.", nodes: null };
-      return {
-        ok: true,
-        locked: rec.finalised,
-        documentHash: rec.documentHash,
-        hasDocument: hasHash(rec.documentHash),
-        label: rec.finalised ? "On ledger · finalised" : "On ledger · pending",
-        detail: rec.finalised
-          ? "Finalised 2-of-3 and recorded immutably on the ledger."
-          : "Recorded on the ledger; awaiting 2-of-3 endorsement.",
-        nodes: null,
-      };
-    } catch (err) {
-      return { ok: false, label: "Unverifiable", detail: parseError(err), nodes: null };
-    }
+    try { return await apiGet(`/integrity/${ref.kind}/${ref.id}`); }
+    catch (err) { return { ok: false, label: "Unverifiable", detail: parseError(err), nodes: null }; }
   }
 
   return {
-    provider, cfg,
-    loadAbis, contracts, signerFor,
-    getRole, setRole, roleMeta, can,
+    cfg,
+    contracts,
+    login, logout, isLoggedIn,
+    getRole, roleMeta, can, hasFailingRecords,
     ping, getChainId, verifyDeployed,
     shortAddr, labelForAddress, fmtResult, fmtTs, toUnix, fmtHash, hasHash, fmtMoney, esc,
-    toast, parseError, withTx, getLogs,
-    fetchAgreements, fetchRecords, fetchSpendRequests,
-    hashFile, verifyDocument, verifyRecord,
+    toast, parseError, withTx,
+    fetchAgreements, fetchRecords, fetchSpendRequests, recentBlocks, fetchAgreementEvents,
+    verifyRecord,
+    uploadDocument, documentUrl, verifyStoredDocument,
+    getNodeStates,
   };
 })();

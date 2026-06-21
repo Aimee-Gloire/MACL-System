@@ -17,11 +17,12 @@ MACL_UI.ready(async () => {
       const out = document.getElementById("rp-filehash");
       const file = e.target.files[0];
       if (!file) { pendingHash = null; out.textContent = "Optional — no file selected."; return; }
-      out.textContent = "Hashing locally…";
+      out.textContent = "Uploading & hashing on the server…";
       try {
-        pendingHash = await MACL.hashFile(file);
-        out.innerHTML = `SHA-256 (stays in browser): <span class="text-primary">${pendingHash}</span>`;
-      } catch (err) { pendingHash = null; out.textContent = "Could not hash file: " + MACL.parseError(err); }
+        // Store the evidence (BL-12); the server returns its SHA-256 for the chain.
+        pendingHash = (await MACL.uploadDocument(file)).hash;
+        out.innerHTML = `Stored · SHA-256 on-chain: <span class="text-primary">${pendingHash}</span>`;
+      } catch (err) { pendingHash = null; out.textContent = "Could not store file: " + MACL.parseError(err); }
     });
   }
 
@@ -60,13 +61,12 @@ MACL_UI.ready(async () => {
   async function loadBlocks() {
     const host = document.getElementById("rp-blocks");
     if (!host) return;
-    const head = await MACL.ping();
-    const nums = [head, head - 1, head - 2].filter((n) => n >= 0);
-    const blks = await Promise.all(nums.map((n) => MACL.provider.getBlock(n)));
+    // The API returns the most recent blocks (number + tx count).
+    const blks = await MACL.recentBlocks(3);
     host.innerHTML = blks.map((b) =>
       `<div class="flex justify-between items-center border-b border-white/10 pb-2">
         <span class="text-[10px] font-code-metadata opacity-60">BLOCK #${b.number}</span>
-        <span class="text-[10px] font-code-metadata">${b.transactions.length} tx</span>
+        <span class="text-[10px] font-code-metadata">${b.txCount} tx</span>
       </div>`).join("");
   }
 
@@ -83,42 +83,31 @@ MACL_UI.ready(async () => {
     tbody.innerHTML = rows.map((r) => {
       const label = MACL.fmtResult(r.rec.result);
       const id = r.rec.id.toString();
-      // Evidence cell: if a fingerprint is stored, offer to re-verify a file against it.
+      // Evidence cell: one-click View (open the stored file) / Verify (server re-hashes
+      // the stored file against the on-chain hash). BL-14 — no file picking.
       const evidence = MACL.hasHash(r.rec.documentHash)
         ? `<div class="flex flex-col gap-1">
 <span class="font-code-metadata text-[11px] text-on-surface-variant" title="${MACL.esc(r.rec.documentHash)}">${MACL.fmtHash(r.rec.documentHash)}</span>
-<label class="text-[10px] text-primary cursor-pointer hover:underline">Verify file<input type="file" data-verify="${id}" class="hidden"/></label>
+<div class="flex items-center gap-2">
+<a href="${MACL.documentUrl(r.rec.documentHash)}" target="_blank" rel="noopener" class="text-[10px] text-primary hover:underline">View</a>
+<button type="button" data-verify-stored="${r.rec.documentHash}" data-out="rp-verify-${id}" class="text-[10px] text-primary hover:underline">Verify</button>
 <span class="text-[10px] font-semibold" id="rp-verify-${id}"></span>
+</div>
 </div>`
         : `<span class="text-xs text-on-surface-variant">—</span>`;
       return `<tr class="hover:bg-surface-container-low transition-colors">
 <td class="px-6 py-5 border-b border-outline-variant font-code-metadata text-xs text-primary">#${id}</td>
 <td class="px-6 py-5 border-b border-outline-variant font-body-sm">Agreement #${r.rec.agreementId}</td>
 <td class="px-6 py-5 border-b border-outline-variant font-body-sm">${MACL.esc(r.target.indicator)}: ${r.rec.reportedValue} ${MACL.esc(r.target.unit)}</td>
-<td class="px-6 py-5 border-b border-outline-variant"><span class="${pillClass[label]} px-3 py-1 rounded-full text-[10px] font-bold">${label}</span></td>
+<td class="px-6 py-5 border-b border-outline-variant"><span data-help="${label.toLowerCase()}" class="${pillClass[label]} px-3 py-1 rounded-full text-[10px] font-bold">${label}</span></td>
 <td class="px-6 py-5 border-b border-outline-variant"><div class="flex items-center gap-1 text-on-surface-variant"><span class="material-symbols-outlined text-sm" style="font-variation-settings:'FILL' 1;">star</span><span class="font-body-sm">${r.count}/${MACL.cfg.ENDORSEMENT_THRESHOLD}</span></div></td>
 <td class="px-6 py-5 border-b border-outline-variant">${evidence}</td>
 <td class="px-6 py-5 border-b border-outline-variant text-right text-body-sm text-on-surface-variant">${MACL.fmtTs(r.rec.evaluatedAt).slice(0, 16)}</td>
 </tr>`;
     }).join("");
 
-    // wire the per-row "Verify file" controls
-    tbody.querySelectorAll("input[data-verify]").forEach((inp) =>
-      inp.onchange = async () => {
-        const id = inp.getAttribute("data-verify");
-        const out = document.getElementById("rp-verify-" + id);
-        const row = rows.find((r) => r.rec.id.toString() === id);
-        const file = inp.files[0];
-        if (!file || !row) return;
-        out.textContent = "Checking…"; out.className = "text-[10px] font-semibold text-on-surface-variant";
-        try {
-          const v = await MACL.verifyDocument(file, row.rec.documentHash);
-          // Honest framing (decision C): a match only proves the file is unchanged
-          // since it was recorded, not that it was genuine in the first place.
-          if (v.match) { out.textContent = "✓ Document verified"; out.title = "Unchanged since recorded — not a proof of authenticity."; out.className = "text-[10px] font-semibold text-green-700"; }
-          else { out.textContent = "✗ Does not match the ledger"; out.className = "text-[10px] font-semibold text-error"; }
-        } catch (err) { out.textContent = MACL.parseError(err); out.className = "text-[10px] font-semibold text-error"; }
-      });
+    // wire the one-click View/Verify controls (BL-14)
+    MACL_UI.wireVerify(tbody);
   }
 
   // --- submit
@@ -146,12 +135,8 @@ MACL_UI.ready(async () => {
     const fh = document.getElementById("rp-filehash");
     if (fh) fh.textContent = "Optional — no file selected.";
 
-    // read the on-chain evaluation from the RecordEvaluated event
-    let result = null, recordId = null;
-    for (const log of receipt.logs) {
-      try { const p = compliance.interface.parseLog(log); if (p && p.name === "RecordEvaluated") { result = Number(p.args.result); recordId = p.args.recordId; } } catch (_) {}
-    }
-    showResult(MACL.fmtResult(result), recordId, receipt);
+    // the API returns the on-chain evaluation (parsed from the RecordEvaluated event)
+    showResult(MACL.fmtResult(receipt.result), receipt.recordId, receipt);
     await loadPast();
     await loadBlocks();
   });

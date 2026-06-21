@@ -30,49 +30,25 @@ window.MACL_UI = (function () {
     catch (err) { MACL.toast("Load error", MACL.parseError(err), "err"); }
   }
 
-  // -------------------------------------------------- role switcher
-  function renderRolebar() {
+  // -------------------------------------------------- session bar (BL-13)
+  // Replaces the old "acting as" switcher: shows the LOGGED-IN org + a Sign out
+  // button. Acting as another org now means signing out and signing in as it.
+  function renderSessionBar() {
     const host = document.getElementById("macl-rolebar");
     if (!host) return;
-    const active = MACL.getRole();
-    host.innerHTML =
-      `<span style="font-size:11px;color:#3f4947;align-self:center;margin-right:6px">Acting as</span>`;
-    for (const [role, meta] of Object.entries(cfg.ROLES)) {
-      const on = role === active;
-      const btn = document.createElement("button");
-      btn.textContent = meta.label;
-      btn.title = meta.address;
-      btn.style.cssText =
-        "font-size:12px;font-weight:600;padding:6px 12px;border-radius:9999px;cursor:pointer;" +
-        "transition:all .15s;border:1px solid " + (on ? "#00322d" : "#bfc9c6") + ";" +
-        "background:" + (on ? "#00322d" : "#fff") + ";color:" + (on ? "#fff" : "#515f74");
-      btn.onclick = () => switchRole(role);
-      host.appendChild(btn);
-    }
-  }
-
-  function switchRole(role) {
-    MACL.setRole(role);
-    applyPermissions(); // live-update the controls for the new role…
-    MACL.toast("Acting as " + MACL.roleMeta(role).label,
-      MACL.shortAddr(MACL.roleMeta(role).address), "info");
-    // …then reload so every table/metric re-reads the chain as the new signer
-    // (the reload re-runs boot() → applyPermissions() again on the fresh page).
-    setTimeout(() => location.reload(), 350);
-  }
-
-  // Wire the Stitch role-switcher modal (index.html) if it exists.
-  function wireRoleModal() {
-    const modal = document.getElementById("role-switcher-modal");
-    if (!modal) return;
-    // Open it from any nav/header element labelled "Role Switcher".
-    document.querySelectorAll("a, div, button").forEach((el) => {
-      if (el.children.length === 0 && el.textContent.trim() === "Role Switcher") {
-        el.style.cursor = "pointer";
-        el.addEventListener("click", () => modal.classList.toggle("hidden"));
-      }
-    });
-    window.toggleRoleSwitcher = () => modal.classList.toggle("hidden");
+    const meta = MACL.roleMeta();
+    host.innerHTML = "";
+    const label = document.createElement("span");
+    label.style.cssText = "font-size:12px;color:#3f4947;align-self:center;margin-right:8px";
+    label.innerHTML = `Signed in as <b style="color:#00322d">${MACL.esc(meta ? meta.label : "—")}</b>`;
+    label.title = meta ? meta.address : "";
+    const out = document.createElement("button");
+    out.textContent = "Sign out";
+    out.style.cssText =
+      "font-size:12px;font-weight:600;padding:6px 12px;border-radius:9999px;cursor:pointer;" +
+      "border:1px solid #bfc9c6;background:#fff;color:#515f74";
+    out.onclick = () => MACL.logout();
+    host.append(label, out);
   }
 
   // -------------------------------------------------- connection light
@@ -85,14 +61,14 @@ window.MACL_UI = (function () {
       const missing = Object.entries(deployed).filter(([, ok]) => !ok).map(([n]) => n);
       if (missing.length) {
         dot = "#ba1a1a";
-        text = `contracts missing: ${missing.join(", ")} — run deploy:local`;
+        text = `contracts missing: ${missing.join(", ")} — run deploy:besu`;
       } else {
         dot = "#2ecc71";
         text = `connected · block #${block}`;
       }
     } catch (_) {
       dot = "#ba1a1a";
-      text = "node unreachable @ " + cfg.RPC_URL;
+      text = "API unreachable @ " + cfg.API_BASE;
     }
     if (host) {
       host.innerHTML =
@@ -125,6 +101,77 @@ window.MACL_UI = (function () {
   // Browser "Save as PDF". A print stylesheet (injected below) hides the
   // sidebar/header chrome so only the ledger content prints.
   function exportPDF() { window.print(); }
+
+  // -------------------------------------------------- one-click verify (BL-14)
+  // Shared by Reports / Budget & Spend / Audit Trail. A "Verify" button carries
+  // data-verify-stored="<on-chain hash>" and data-out="<result span id>". On
+  // click, the API fetches the STORED file and re-hashes it server-side against
+  // that hash — no file picking, no browser hashing, no chain/storage access here.
+  function renderVerifyResult(out, v) {
+    let text, title, color;
+    if (!v || !v.stored) {
+      text = "No stored copy"; color = "#515f74";
+      title = "No file is stored for this fingerprint (nothing was uploaded for it).";
+    } else if (v.match) {
+      text = "✓ Verified"; color = "#15803d";
+      title = "Unchanged since recorded — not proof of authenticity.";
+    } else {
+      text = "✗ Not verified"; color = "#ba1a1a";
+      title = "The stored file does not match the on-chain hash.";
+    }
+    out.textContent = text; out.title = title; out.style.color = color;
+  }
+  function wireVerify(root) {
+    (root || document).querySelectorAll("button[data-verify-stored]").forEach((b) => {
+      if (b.dataset.wired) return;
+      b.dataset.wired = "1";
+      b.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const hash = b.getAttribute("data-verify-stored");
+        const out = document.getElementById(b.getAttribute("data-out"));
+        if (out) { out.textContent = "Checking…"; out.style.color = "#515f74"; out.title = ""; }
+        try {
+          const v = await MACL.verifyStoredDocument(hash);
+          if (out) renderVerifyResult(out, v);
+        } catch (err) {
+          if (out) { out.textContent = MACL.parseError(err); out.style.color = "#ba1a1a"; }
+        }
+      });
+    });
+  }
+
+  // -------------------------------------------------- plain-language glossary (BL-15)
+  // Any element with data-help="<key>" gets a hover tooltip explaining the term in
+  // plain language — so non-technical users aren't blocked by blockchain jargon.
+  const GLOSSARY = {
+    endorse: "Endorse = formally agree this record is correct. Two of the three organisations must endorse before it is finalised (2-of-3).",
+    decline: "Decline = formally dispute this record. Enough declines stop it ever reaching the 2-of-3 needed to finalise.",
+    finalise: "Finalise = lock the record permanently once 2 of 3 organisations have endorsed it. It can't be changed afterwards.",
+    blockhash: "Block hash = the fingerprint of the blockchain block that locked this record — proof of exactly when it was finalised.",
+    "2of3": "2-of-3 = at least two of the three organisations (NGO, Government, Donor) must agree before anything is finalised or approved.",
+    endorsement: "Endorsement = one organisation's formal agreement. Two of three are needed to finalise a record or approve a spend.",
+    pass: "PASS = the reported value met the target on time.",
+    fail: "FAIL = the reported value was below the agreed target.",
+    flag: "FLAG = the target was met but reported after the deadline — needs a human to review.",
+    pending: "Pending = recorded on the ledger but not yet finalised (still waiting for 2 of 3 to endorse).",
+    integrity: "Integrity check = each of the three nodes is asked for this record and the copies are compared. 'Verified across 3 nodes' means all agree.",
+    expired: "Window passed = the verification window elapsed before 2 of 3 endorsed. The record can no longer be finalised; a signatory should mark it Unverified.",
+    unverified: "Unverified = a terminal state. The verification window passed without 2-of-3 endorsement, so the record was closed as unverified instead of finalised.",
+  };
+  function injectGlossaryStyles() {
+    const style = document.createElement("style");
+    style.textContent = "[data-help]{cursor:help}";
+    document.head.appendChild(style);
+  }
+  function tip(el) {
+    const k = el.getAttribute && el.getAttribute("data-help");
+    if (k && GLOSSARY[k] && !el.title) el.title = GLOSSARY[k];
+  }
+  function applyGlossary(root) {
+    const scope = root || document;
+    if (scope.nodeType === 1 && scope.hasAttribute && scope.hasAttribute("data-help")) tip(scope);
+    if (scope.querySelectorAll) scope.querySelectorAll("[data-help]").forEach(tip);
+  }
 
   // Print the ENTIRE current page (all cards/tables as shown), dropping
   // only the fixed nav rail and interactive-only controls (buttons,
@@ -209,30 +256,30 @@ window.MACL_UI = (function () {
         if (n.nodeType !== 1) continue;
         if (n.matches && n.matches("[data-perm]")) gateOne(n);
         if (n.querySelectorAll) n.querySelectorAll("[data-perm]").forEach(gateOne);
+        // Plain-language tooltips on any dynamically-rendered jargon (BL-15).
+        applyGlossary(n);
       }
     }).observe(document.body, { childList: true, subtree: true });
   }
 
   // -------------------------------------------------- boot
   async function boot() {
+    // BL-13: every page requires a session. If not signed in, go to the login page.
+    if (!MACL.isLoggedIn()) { location.href = "login.html"; return; }
     injectPrintStyles();
     injectPermStyles();
+    injectGlossaryStyles();
     installPermGuards();
-    renderRolebar();
-    wireRoleModal();
-    try {
-      await MACL.loadAbis();
-    } catch (err) {
-      MACL.toast("Could not load ABIs", MACL.parseError(err), "err");
-    }
+    renderSessionBar();
     await healthCheck();
     setInterval(healthCheck, 10000);
     booted = true;
     readyQueue.forEach(runSafe);
-    applyPermissions(); // gate the static write controls present on load
+    applyPermissions(); // gate the static write controls for the logged-in role
+    applyGlossary();    // tooltip the static jargon present on load
   }
 
   document.addEventListener("DOMContentLoaded", boot);
 
-  return { ready, switchRole, exportCSV, exportPDF, healthCheck, applyPermissions };
+  return { ready, exportCSV, exportPDF, healthCheck, applyPermissions, wireVerify, applyGlossary };
 })();

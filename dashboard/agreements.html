@@ -118,7 +118,7 @@
 </head>
 <body class="bg-background text-on-surface font-body-md selection:bg-primary-fixed-dim selection:text-on-primary-fixed">
 <!-- Sidebar Navigation -->
-<aside class="fixed left-0 top-0 h-full w-[260px] bg-surface-container-low border-r border-outline-variant flex flex-col py-8 px-4 gap-y-stack-md z-50">
+<aside class="md:fixed md:left-0 md:top-0 md:h-full w-full md:w-[260px] bg-surface-container-low border-r border-outline-variant flex flex-col py-8 px-4 gap-y-stack-md z-50">
 <div class="flex flex-col gap-2 mb-6">
 <div class="flex items-center gap-3">
 <div class="w-10 h-10 bg-primary flex items-center justify-center rounded">
@@ -157,7 +157,7 @@
 </div>
 </aside>
 <!-- Main Content Canvas -->
-<main class="ml-[260px] min-h-screen">
+<main class="ml-0 md:ml-[260px] min-h-screen">
 <!-- Top Navigation Anchor -->
 <header class="w-full sticky top-0 z-40 bg-surface border-b border-outline-variant px-margin-desktop py-4 flex justify-between items-center max-w-container-max mx-auto">
 <div class="flex items-center gap-4">
@@ -342,8 +342,7 @@
         `;
         document.head.appendChild(style);
     </script>
-<!-- MACL chain wiring -->
-<script src="vendor/ethers.umd.min.js"></script>
+<!-- MACL app wiring (browser talks to the Tier-2 API only) -->
 <script src="config.js"></script>
 <script src="js/chain.js"></script>
 <script src="js/ui.js"></script>

@@ -69,26 +69,16 @@ MACL_UI.ready(async () => {
   async function renderLedger() {
     const host = document.getElementById("ag-ledger");
     if (!host) return;
-    const { agreement } = MACL.contracts();
-    const evs = [];
-    for (const [name, label] of [["AgreementCreated", "created"], ["TargetAdded", "target added"], ["AgreementFinalised", "locked"]]) {
-      for (const log of await MACL.getLogs(agreement, name)) evs.push({ name, label, log });
-    }
-    evs.sort((a, b) => Number(b.log.blockNumber) - Number(a.log.blockNumber));
-    const blocks = {};
-    await Promise.all([...new Set(evs.map((e) => e.log.blockNumber))].map(async (bn) => {
-      blocks[bn] = (await MACL.provider.getBlock(bn))?.timestamp || 0;
-    }));
-    host.innerHTML = evs.slice(0, 6).map((e) => {
-      const a = e.log.args;
-      const id = (a.id ?? a.agreementId).toString();
+    // The API returns recent agreement lifecycle events (created / target / locked).
+    const evs = await MACL.fetchAgreementEvents(6);
+    host.innerHTML = evs.map((e) => {
       const title = e.name === "TargetAdded"
-        ? `Target added to agreement #${id}`
-        : e.name === "AgreementFinalised" ? `Agreement #${id} locked` : `Agreement #${id} created`;
+        ? `Target added to agreement #${e.id}`
+        : e.name === "AgreementFinalised" ? `Agreement #${e.id} locked` : `Agreement #${e.id} created`;
       return `<div class="ledger-stroke">
-<p class="text-xs font-code-metadata text-on-surface-variant">${MACL.fmtTs(blocks[e.log.blockNumber])}</p>
+<p class="text-xs font-code-metadata text-on-surface-variant">${MACL.fmtTs(e.timestamp)}</p>
 <p class="text-sm font-semibold">${MACL.esc(title)}</p>
-<p class="text-xs text-on-surface-variant">block #${e.log.blockNumber}</p>
+<p class="text-xs text-on-surface-variant">block #${e.blockNumber}</p>
 </div>`;
     }).join("") || `<p class="text-xs text-on-surface-variant">No agreement activity yet.</p>`;
   }
@@ -120,11 +110,8 @@ MACL_UI.ready(async () => {
     let receipt;
     try { receipt = await MACL.withTx("Create agreement", () => agreement.createAgreement(start, end, sigs)); }
     catch (_) { return; }
-    // recover the new id from the AgreementCreated event
-    let newId;
-    for (const log of receipt.logs) {
-      try { const p = agreement.interface.parseLog(log); if (p && p.name === "AgreementCreated") newId = p.args.id; } catch (_) {}
-    }
+    // the API returns the new id (parsed from the AgreementCreated event server-side)
+    const newId = receipt.id;
     for (const t of targets) {
       try { await MACL.withTx(`Add target ${t.indicator}`, () =>
         agreement.addTarget(newId, t.indicator, BigInt(t.threshold), t.unit, t.deadline)); }
