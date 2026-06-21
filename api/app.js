@@ -5,6 +5,7 @@
 
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const { config } = require("./lib/config");
 const { makeChain } = require("./lib/chain");
 const { makeRouter } = require("./routes");
@@ -29,7 +30,26 @@ function createApp(opts = {}) {
   })();
 
   const app = express();
-  app.use(cors({ origin: cfg.corsOrigin }));
+
+  // S5 / F-13: security headers. The strict CSP + nosniff matter most for the
+  // document-download response (an evidence file must never render/run in our
+  // origin); they're harmless on the JSON API. crossOriginResourcePolicy is set to
+  // cross-origin because the dashboard is a different origin (CORS is already
+  // pinned in F-10), so it must be allowed to read the API's responses.
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }));
+  // Expose Content-Disposition so the dashboard's cross-origin fetch() can read
+  // the download filename (F-07 saves the file via a Blob).
+  app.use(cors({ origin: cfg.corsOrigin, exposedHeaders: ["Content-Disposition"] }));
 
   // Document routes parse their OWN raw (binary) body, so they must be mounted
   // BEFORE the JSON parser (else a .json file upload would be JSON-parsed). They

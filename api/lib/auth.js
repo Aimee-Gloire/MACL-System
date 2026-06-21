@@ -80,14 +80,14 @@ function verifyToken(token) {
   return jwt.verify(token, secret); // throws on invalid/expired
 }
 
-// Pull a token from the Authorization header OR a ?token= query param. The query
-// fallback is what lets plain <a href> document downloads (which can't set a
-// header) carry the session — fine for the capstone's localhost/LAN scope.
+// Pull a token from the Authorization header ONLY. S5 / F-07: the previous
+// ?token= query-param fallback is gone — tokens in URLs leak into logs, history
+// and referrers. Document downloads now fetch() with the header and save a Blob
+// (see dashboard chain.js/ui.js), so no link needs to carry the token any more.
 function tokenFromReq(req) {
   const hdr = req.get("authorization") || "";
   const m = hdr.match(/^Bearer\s+(.+)$/i);
   if (m) return m[1];
-  if (req.query && req.query.token) return String(req.query.token);
   return null;
 }
 

@@ -305,12 +305,19 @@ window.MACL = (function () {
   async function uploadDocument(file) {
     return apiPostFile(`/documents/upload?filename=${encodeURIComponent(file.name || "file")}`, file);
   }
-  // Direct URL to download a stored file (the on-chain hash is the key). The
-  // session token rides as a query param so a plain <a href> download is
-  // authenticated (a link navigation can't set an Authorization header).
-  function documentUrl(hash) {
-    const t = token();
-    return `${API}/documents/${hash}${t ? `?token=${encodeURIComponent(t)}` : ""}`;
+  // Fetch a stored file WITH the Authorization header (F-07: no token in any URL)
+  // and return it as a Blob + its filename. The caller saves it via a Blob URL, so
+  // the browser never navigates to the document and it can't execute in our origin.
+  async function fetchDocumentBlob(hash) {
+    const res = await fetch(`${API}/documents/${hash}`, { headers: authHeaders() });
+    if (res.status === 401) { onUnauthorized(); throw new Error("session expired"); }
+    if (!res.ok) throw await apiError(res);
+    const blob = await res.blob();
+    let filename = `${hash}.bin`;
+    const cd = res.headers.get("content-disposition") || "";
+    const m = cd.match(/filename="?([^"]+)"?/i);
+    if (m) filename = m[1];
+    return { blob, filename };
   }
   // Ask the server to re-hash the STORED file and compare to the on-chain hash.
   async function verifyStoredDocument(hash) {
@@ -339,7 +346,7 @@ window.MACL = (function () {
     toast, parseError, withTx,
     fetchAgreements, fetchRecords, fetchSpendRequests, recentBlocks, fetchAgreementEvents,
     verifyRecord,
-    uploadDocument, documentUrl, verifyStoredDocument,
+    uploadDocument, fetchDocumentBlob, verifyStoredDocument,
     getNodeStates,
   };
 })();

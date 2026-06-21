@@ -102,6 +102,24 @@ window.MACL_UI = (function () {
   // sidebar/header chrome so only the ledger content prints.
   function exportPDF() { window.print(); }
 
+  // -------------------------------------------------- secure document view (F-07)
+  // Fetch the stored evidence file WITH the auth header (no token in any URL) and
+  // save it via a Blob. We never point the browser AT the file, so a malicious
+  // upload can't run script in our origin; combined with the server's
+  // attachment + nosniff + type allow-list (F-06), this closes the stored-XSS hole.
+  async function viewDoc(hash) {
+    try {
+      const { blob, filename } = await MACL.fetchDocumentBlob(hash);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      MACL.toast("Could not open document", MACL.parseError(err), "err");
+    }
+  }
+
   // -------------------------------------------------- one-click verify (BL-14)
   // Shared by Reports / Budget & Spend / Audit Trail. A "Verify" button carries
   // data-verify-stored="<on-chain hash>" and data-out="<result span id>". On
@@ -281,5 +299,5 @@ window.MACL_UI = (function () {
 
   document.addEventListener("DOMContentLoaded", boot);
 
-  return { ready, exportCSV, exportPDF, healthCheck, applyPermissions, wireVerify, applyGlossary };
+  return { ready, exportCSV, exportPDF, healthCheck, applyPermissions, wireVerify, applyGlossary, viewDoc };
 })();

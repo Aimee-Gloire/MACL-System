@@ -153,7 +153,7 @@ ${MACL.hasHash(r.rec.documentHash) ? `<div class="bg-surface-container-lowest p-
 <span class="text-[10px] text-on-surface-variant block mb-1">SUPPORTING-DOCUMENT FINGERPRINT (SHA-256)</span>
 <div class="font-code-metadata text-[11px] break-all text-on-surface">${MACL.esc(r.rec.documentHash)}</div>
 <div class="mt-3 flex flex-wrap items-center gap-2">
-<a href="${MACL.documentUrl(r.rec.documentHash)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs text-primary font-semibold hover:underline">View</a>
+<a href="#" onclick="event.stopPropagation(); MACL_UI.viewDoc('${r.rec.documentHash}'); return false;" class="text-xs text-primary font-semibold hover:underline">View</a>
 <button type="button" data-verify-stored="${r.rec.documentHash}" data-out="verifyrec-out-${id}" onclick="event.stopPropagation()" class="text-xs text-primary font-semibold hover:underline">Verify</button>
 <span class="text-xs font-semibold" id="verifyrec-out-${id}"></span>
 </div>
