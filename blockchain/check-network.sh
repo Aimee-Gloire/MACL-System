@@ -6,7 +6,9 @@ set -euo pipefail
 declare -a PORTS=("8545" "8546" "8547")
 declare -a NAMES=("Node-1 (NGO)" "Node-2 (Ministry)" "Node-3 (Donor)")
 
-rpc() { curl -s -X POST --data "$2" "localhost:$1/" -H "Content-Type: application/json"; }
+# Use 127.0.0.1 (not localhost): the node RPC ports are published on the host's
+# IPv4 loopback only (S4/F-05), and "localhost" can resolve to IPv6 ::1 first.
+rpc() { curl -s -X POST --data "$2" "127.0.0.1:$1/" -H "Content-Type: application/json"; }
 
 echo "== QBFT validator set (from Node-1) =="
 rpc 8545 '{"jsonrpc":"2.0","method":"qbft_getValidatorsByBlockNumber","params":["latest"],"id":1}' | python3 -m json.tool

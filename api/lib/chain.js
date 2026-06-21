@@ -83,7 +83,12 @@ function makeChain(cfg) {
       const receipt = await tx.wait();
       return { tx, receipt };
     } catch (err) {
-      throw new ApiError(502, revertReason(err));
+      // A contract REVERT is a safe, client-actionable validation message (e.g.
+      // "spend exceeds remaining budget", "cannot approve your own request") — keep
+      // it as a clean 4xx so the user sees it. Anything else is an unexpected infra
+      // error → 502, which the app's error handler genericises + logs (F-14).
+      const isRevert = !!(err && (err.code === "CALL_EXCEPTION" || err.revert || err.reason));
+      throw new ApiError(isRevert ? 400 : 502, revertReason(err));
     }
   }
 

@@ -232,7 +232,7 @@ MACL_UI.ready(async () => {
 <span class="text-[10px] text-on-surface-variant block mb-1">SUPPORTING-DOCUMENT FINGERPRINT (SHA-256)</span>
 <div class="font-code-metadata text-[11px] break-all text-on-surface">${MACL.esc(r.req.documentHash)}</div>
 <div class="mt-3 flex flex-wrap items-center gap-2">
-<a href="${MACL.documentUrl(r.req.documentHash)}" target="_blank" rel="noopener" class="text-xs text-primary font-semibold hover:underline">View</a>
+<a href="#" onclick="MACL_UI.viewDoc('${r.req.documentHash}'); return false;" class="text-xs text-primary font-semibold hover:underline">View</a>
 <button type="button" data-verify-stored="${r.req.documentHash}" data-out="verify-out-${id}" class="text-xs text-primary font-semibold hover:underline">Verify</button>
 <span class="text-xs font-semibold" id="verify-out-${id}"></span>
 </div>
@@ -257,7 +257,7 @@ MACL_UI.ready(async () => {
 <span class="text-[10px] text-on-surface-variant block mb-1">RECEIPT FINGERPRINT (SHA-256)</span>
 <div class="font-code-metadata text-[11px] break-all text-on-surface">${MACL.esc(r.req.receiptHash)}</div>
 <div class="mt-3 flex flex-wrap items-center gap-2">
-<a href="${MACL.documentUrl(r.req.receiptHash)}" target="_blank" rel="noopener" class="text-xs text-primary font-semibold hover:underline">View</a>
+<a href="#" onclick="MACL_UI.viewDoc('${r.req.receiptHash}'); return false;" class="text-xs text-primary font-semibold hover:underline">View</a>
 <button type="button" data-verify-stored="${r.req.receiptHash}" data-out="verify-receipt-out-${id}" class="text-xs text-primary font-semibold hover:underline">Verify</button>
 <span class="text-xs font-semibold" id="verify-receipt-out-${id}"></span>
 </div>

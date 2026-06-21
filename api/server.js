@@ -3,8 +3,10 @@
 
 require("dotenv").config();
 const { createApp } = require("./app");
-const { usingDefaultSecret, usingDefaultPasswords } = require("./lib/auth");
+const { rolesWithoutPasswordHash } = require("./lib/auth");
 
+// createApp() validates JWT_SECRET (fail-closed, F-01) — if it is missing or too
+// short this throws here and the process exits before listening, by design.
 const { app, cfg, docs } = createApp();
 
 app.listen(cfg.port, () => {
@@ -13,11 +15,10 @@ app.listen(cfg.port, () => {
   console.log(`  nodes     : ${cfg.nodeUrls.length} validator RPC(s) (server-side only)`);
   console.log(`  contracts : ${JSON.stringify(cfg.addresses)}`);
   console.log(`  documents : ${docs.configured ? "Neon/Postgres store ready" : "NOT configured (set DATABASE_URL + npm run migrate)"}`);
-  console.log(`  auth      : JWT login enabled (per-org)`);
-  if (usingDefaultSecret()) {
-    console.warn("  WARNING   : JWT_SECRET is not set — using an insecure default. Set JWT_SECRET in api/.env.");
-  }
-  if (usingDefaultPasswords()) {
-    console.warn("  WARNING   : one or more org login passwords are unset — using TEST defaults. Set DONOR/NGO/AUDIT_PASSWORD in api/.env before hosting.");
+  console.log(`  auth      : JWT login enabled (per-org); secret OK (>= 32 chars)`);
+  const missing = rolesWithoutPasswordHash();
+  if (missing.length) {
+    console.warn(`  WARNING   : no password hash set for: ${missing.join(", ")} — ${missing.length === 1 ? "that role" : "those roles"} cannot log in. ` +
+      `Set ${missing.map((r) => r.toUpperCase() + "_PW_HASH").join(" / ")} in api/.env (generate with: node scripts/hash-password.js <password>).`);
   }
 });

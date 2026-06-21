@@ -3,8 +3,9 @@
 // endpoint rejects a request that carries no valid token (401), and that only the
 // two intended public endpoints (health, login) are reachable without one.
 
-process.env.JWT_SECRET = "test-secret";
-process.env.DONOR_PASSWORD = "d";
+const bcrypt = require("bcrypt");
+process.env.JWT_SECRET = "test-jwt-secret-at-least-32-chars-long!!";
+process.env.DONOR_PW_HASH = bcrypt.hashSync("d", 4);
 
 const { test, before, after } = require("node:test");
 const assert = require("node:assert");

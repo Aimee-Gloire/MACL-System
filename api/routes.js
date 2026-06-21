@@ -10,6 +10,7 @@
 
 const express = require("express");
 const { ApiError } = require("./lib/chain");
+const { write: auditWrite } = require("./lib/audit");
 
 function requireFields(body, fields) {
   for (const f of fields) {
@@ -34,6 +35,9 @@ const ACTION_ROLE = {
   "report.submit": "ngo",
   "spend.request": "ngo",
   "spend.markSpent": "ngo",
+  // S3 / F-04: registering an organisation is signed with the OWNER key, so only
+  // the dedicated admin login may invoke it. Every other role gets a clean 403.
+  "org.register": "admin",
 };
 function requirePerm(req, action) {
   const need = ACTION_ROLE[action];
@@ -45,6 +49,29 @@ function requirePerm(req, action) {
 function makeRouter(chain) {
   const r = express.Router();
   const h = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+  // S6 / F-14: audit every SUCCESSFUL write (POST). We wrap res.json so the entry
+  // is captured centrally — role (from the token), the action, the target id, the
+  // evaluation result and the tx hash — without editing each handler. req.params
+  // is populated by the time res.json runs (the route has matched).
+  r.use((req, res, next) => {
+    if (req.method !== "POST") return next();
+    const orig = res.json.bind(res);
+    res.json = (body) => {
+      if (res.statusCode < 400) {
+        const b = req.body || {};
+        auditWrite({
+          role: req.auth && req.auth.role,
+          action: `${req.method} ${req.path}`,
+          target: (req.params && (req.params.id || req.params.hash)) || b.agreementId || b.address || null,
+          result: body && body.result !== undefined ? body.result : null,
+          tx: (body && body.hash) || null,
+        });
+      }
+      return orig(body);
+    };
+    next();
+  });
 
   // ---------------------------------------------------------------- reads
   // (auth is applied at mount time in app.js; /health is the public exception)
@@ -93,11 +120,13 @@ function makeRouter(chain) {
     res.json(await chain.setBudget(req.auth.role, intParam(req.params.id, "id"), req.body.amount));
   }));
 
-  // Admin/owner-signed action (registers an org with the deployer key). Requires a
-  // valid session; not exposed in the dashboard. Hardening to an explicit admin
-  // role is left for later.
+  // Owner-signed action (registers an org with the deployer key). S3 / F-04: now
+  // restricted to the dedicated admin login — any other session gets a clean 403.
   r.post("/org/register", h(async (req, res) => {
+    requirePerm(req, "org.register");
     requireFields(req.body, ["address", "orgType", "name"]);
+    // Success is captured by the central audit middleware above (action, admin,
+    // target address, tx hash) — F-14.
     res.json(await chain.registerOrg(req.body.address, req.body.orgType, req.body.name));
   }));
 

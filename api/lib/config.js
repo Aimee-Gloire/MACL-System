@@ -5,7 +5,11 @@
 function config() {
   return {
     port: Number(process.env.PORT || 3001),
-    corsOrigin: process.env.CORS_ORIGIN || "*",
+    // S4 / F-10: pin CORS to the dashboard origin(s) instead of "*". Comma-separated
+    // list → only those browser origins may call the API. Default covers the
+    // documented local dashboard (served on :8080 via localhost or 127.0.0.1).
+    corsOrigin: (process.env.CORS_ORIGIN || "http://localhost:8080,http://127.0.0.1:8080")
+      .split(",").map((s) => s.trim()).filter(Boolean),
 
     rpcUrl: process.env.BESU_RPC_URL || "http://127.0.0.1:8545",
     nodeUrls: (process.env.NODE_RPC_URLS ||

@@ -14,3 +14,13 @@ CREATE TABLE IF NOT EXISTS documents (
   size_bytes   BIGINT      NOT NULL,
   uploaded_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- S5 / F-15: per-role, per-day upload accounting (append-only) so the API can
+-- enforce a simple quota and refuse abusive upload volume with a clean 429.
+CREATE TABLE IF NOT EXISTS upload_log (
+  id          BIGSERIAL   PRIMARY KEY,
+  role        TEXT        NOT NULL,
+  size_bytes  BIGINT      NOT NULL,
+  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS upload_log_role_day ON upload_log (role, uploaded_at);

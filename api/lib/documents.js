@@ -75,6 +75,20 @@ function makeDocStore(pool) {
       const computedHash = sha256Hex(doc.content);
       return { stored: true, match: computedHash === normHash(hash), computedHash, size: doc.size };
     },
+
+    // F-15 quota helpers: how much this role has uploaded so far TODAY, and an
+    // append-only record of each upload (used to enforce the per-day cap).
+    async dailyUploadUsage(role) {
+      const { rows } = await pool.query(
+        `SELECT COUNT(*)::int AS count, COALESCE(SUM(size_bytes), 0)::bigint AS bytes
+           FROM upload_log WHERE role = $1 AND uploaded_at >= date_trunc('day', now())`,
+        [role]
+      );
+      return { count: rows[0].count, bytes: Number(rows[0].bytes) };
+    },
+    async recordUpload(role, size) {
+      await pool.query("INSERT INTO upload_log (role, size_bytes) VALUES ($1, $2)", [role, size]);
+    },
   };
 }
 

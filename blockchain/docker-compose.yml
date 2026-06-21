@@ -2,7 +2,8 @@
 # Run `./setup-network.sh` first (generates keys + .env), then `docker compose up`.
 #
 # Node roles (proposal): Node-1 = implementing NGO, Node-2 = government M&E, Node-3 = donor.
-# RPC ports on the host:  Node-1 8545 | Node-2 8546 | Node-3 8547
+# RPC ports on the host LOOPBACK only (127.0.0.1, not the LAN):
+#   Node-1 8545 | Node-2 8546 | Node-3 8547  — reachable by the Tier-2 API on this host.
 services:
   node1:
     image: hyperledger/besu:24.12.2
@@ -11,9 +12,16 @@ services:
       - --data-path=/data
       - --genesis-file=/genesis.json
       - --rpc-http-enabled
-      - --rpc-http-api=ETH,NET,QBFT,WEB3,ADMIN
-      - --host-allowlist=*
-      - --rpc-http-cors-origins=all
+      # S4 / F-05 hardening:
+      #  - drop the ADMIN API (node admin/peer methods); the app only needs these.
+      #  - host-allowlist: reject RPC whose Host header isn't loopback (anti DNS-rebind).
+      #  - CORS: only the Tier-2 API origin may call the RPC from a browser (not "all").
+      #  - rpc-http-host stays 0.0.0.0 *inside the container* so Docker can forward the
+      #    published port; LAN exposure is closed by binding that port to the host's
+      #    loopback below (ports: "127.0.0.1:<host>:8545"), not by this flag.
+      - --rpc-http-api=ETH,NET,QBFT,WEB3
+      - --host-allowlist=127.0.0.1,localhost
+      - --rpc-http-cors-origins=http://127.0.0.1:3001
       - --rpc-http-host=0.0.0.0
       - --p2p-host=172.16.239.11
       - --profile=ENTERPRISE
@@ -21,7 +29,7 @@ services:
       - ./Node-1/data:/data
       - ./genesis.json:/genesis.json:ro
     ports:
-      - "8545:8545"
+      - "127.0.0.1:8545:8545"
     networks:
       macl-net:
         ipv4_address: 172.16.239.11
@@ -35,9 +43,16 @@ services:
       - --genesis-file=/genesis.json
       - --bootnodes=${BOOTNODE_ENODE}
       - --rpc-http-enabled
-      - --rpc-http-api=ETH,NET,QBFT,WEB3,ADMIN
-      - --host-allowlist=*
-      - --rpc-http-cors-origins=all
+      # S4 / F-05 hardening:
+      #  - drop the ADMIN API (node admin/peer methods); the app only needs these.
+      #  - host-allowlist: reject RPC whose Host header isn't loopback (anti DNS-rebind).
+      #  - CORS: only the Tier-2 API origin may call the RPC from a browser (not "all").
+      #  - rpc-http-host stays 0.0.0.0 *inside the container* so Docker can forward the
+      #    published port; LAN exposure is closed by binding that port to the host's
+      #    loopback below (ports: "127.0.0.1:<host>:8545"), not by this flag.
+      - --rpc-http-api=ETH,NET,QBFT,WEB3
+      - --host-allowlist=127.0.0.1,localhost
+      - --rpc-http-cors-origins=http://127.0.0.1:3001
       - --rpc-http-host=0.0.0.0
       - --p2p-host=172.16.239.12
       - --profile=ENTERPRISE
@@ -45,7 +60,7 @@ services:
       - ./Node-2/data:/data
       - ./genesis.json:/genesis.json:ro
     ports:
-      - "8546:8545"
+      - "127.0.0.1:8546:8545"
     depends_on: [node1]
     networks:
       macl-net:
@@ -60,9 +75,16 @@ services:
       - --genesis-file=/genesis.json
       - --bootnodes=${BOOTNODE_ENODE}
       - --rpc-http-enabled
-      - --rpc-http-api=ETH,NET,QBFT,WEB3,ADMIN
-      - --host-allowlist=*
-      - --rpc-http-cors-origins=all
+      # S4 / F-05 hardening:
+      #  - drop the ADMIN API (node admin/peer methods); the app only needs these.
+      #  - host-allowlist: reject RPC whose Host header isn't loopback (anti DNS-rebind).
+      #  - CORS: only the Tier-2 API origin may call the RPC from a browser (not "all").
+      #  - rpc-http-host stays 0.0.0.0 *inside the container* so Docker can forward the
+      #    published port; LAN exposure is closed by binding that port to the host's
+      #    loopback below (ports: "127.0.0.1:<host>:8545"), not by this flag.
+      - --rpc-http-api=ETH,NET,QBFT,WEB3
+      - --host-allowlist=127.0.0.1,localhost
+      - --rpc-http-cors-origins=http://127.0.0.1:3001
       - --rpc-http-host=0.0.0.0
       - --p2p-host=172.16.239.13
       - --profile=ENTERPRISE
@@ -70,7 +92,7 @@ services:
       - ./Node-3/data:/data
       - ./genesis.json:/genesis.json:ro
     ports:
-      - "8547:8545"
+      - "127.0.0.1:8547:8545"
     depends_on: [node1]
     networks:
       macl-net:

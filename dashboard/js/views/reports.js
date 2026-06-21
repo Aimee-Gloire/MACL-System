@@ -89,7 +89,7 @@ MACL_UI.ready(async () => {
         ? `<div class="flex flex-col gap-1">
 <span class="font-code-metadata text-[11px] text-on-surface-variant" title="${MACL.esc(r.rec.documentHash)}">${MACL.fmtHash(r.rec.documentHash)}</span>
 <div class="flex items-center gap-2">
-<a href="${MACL.documentUrl(r.rec.documentHash)}" target="_blank" rel="noopener" class="text-[10px] text-primary hover:underline">View</a>
+<a href="#" onclick="MACL_UI.viewDoc('${r.rec.documentHash}'); return false;" class="text-[10px] text-primary hover:underline">View</a>
 <button type="button" data-verify-stored="${r.rec.documentHash}" data-out="rp-verify-${id}" class="text-[10px] text-primary hover:underline">Verify</button>
 <span class="text-[10px] font-semibold" id="rp-verify-${id}"></span>
 </div>

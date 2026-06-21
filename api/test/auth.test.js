@@ -2,10 +2,11 @@
 // BL-13 auth tests: login, token gating, role-from-token enforcement (403),
 // the public health exception, and the ?token= query fallback (download links).
 
-process.env.JWT_SECRET = "test-secret";
-process.env.DONOR_PASSWORD = "d";
-process.env.NGO_PASSWORD = "n";
-process.env.AUDIT_PASSWORD = "a";
+const bcrypt = require("bcrypt");
+process.env.JWT_SECRET = "test-jwt-secret-at-least-32-chars-long!!";
+process.env.DONOR_PW_HASH = bcrypt.hashSync("d", 4);
+process.env.NGO_PW_HASH = bcrypt.hashSync("n", 4);
+process.env.AUDIT_PW_HASH = bcrypt.hashSync("a", 4);
 
 const { test, before, after } = require("node:test");
 const assert = require("node:assert");
@@ -64,10 +65,14 @@ test("role is taken from the token: donor may not submit a report (403)", async 
   assert.match((await res.json()).error, /requires ngo/i);
 });
 
-test("the ?token= query fallback authenticates (used by download links)", async () => {
+test("a token in the ?token= query string is REJECTED (F-07: header-only auth)", async () => {
   const { json } = await login("audit", "a");
+  // Same valid token, but only in the URL — no Authorization header.
   const res = await fetch(`${base}/api/agreements?token=${encodeURIComponent(json.token)}`);
-  assert.equal(res.status, 200);
+  assert.equal(res.status, 401);
+  // And it works when the same token is sent as a header.
+  const ok = await fetch(`${base}/api/agreements`, { headers: { authorization: `Bearer ${json.token}` } });
+  assert.equal(ok.status, 200);
 });
 
 test("a garbage token → 401", async () => {
