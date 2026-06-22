@@ -297,7 +297,7 @@ window.MACL_UI = (function () {
     installPermGuards();
     renderSessionBar();
     await healthCheck();
-    setInterval(healthCheck, 10000);
+    setInterval(healthCheck, 5000); // ~match the Overview integrity panel (4s) so the two block counters stay in step
     booted = true;
     readyQueue.forEach(runSafe);
     applyPermissions(); // gate the static write controls for the logged-in role
