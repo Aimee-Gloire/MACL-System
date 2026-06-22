@@ -159,9 +159,7 @@
 <!-- Top Navigation Anchor -->
 <header class="w-full sticky top-0 z-40 bg-surface border-b border-outline-variant px-margin-desktop py-4 flex justify-between items-center max-w-container-max mx-auto">
 <div class="flex items-center gap-4">
-<h1 class="font-headline-md text-headline-md font-bold text-primary">Compliance Ledger</h1>
-<div class="h-6 w-px bg-outline-variant mx-2"></div>
-<span class="font-body-md text-body-md text-primary border-b-2 border-primary font-bold cursor-pointer">Agreements</span>
+<h1 class="font-headline-md text-headline-md font-bold text-primary">Agreements</h1>
 </div>
 <div class="flex items-center gap-4">
 <div id="macl-rolebar" class="flex items-center gap-2"></div>
@@ -172,7 +170,7 @@
 <div class="flex justify-between items-end mb-8">
 <div>
 <h2 class="font-display-lg text-display-lg text-primary">Programme Agreements</h2>
-<p class="text-on-surface-variant mt-2 max-w-2xl">Encode programme agreements and their measurable targets, then lock them on-chain. Acting as <span id="ag-acting" class="font-semibold text-primary">…</span>.</p>
+<p class="text-on-surface-variant mt-2 max-w-2xl">Encode programme agreements and their measurable targets, then lock them on-chain.</p>
 </div>
 <button data-perm="agreement.create" class="bg-primary text-white font-semibold px-6 py-3 rounded flex items-center gap-2 hover:bg-opacity-90 active:scale-95 transition-all" onclick="document.getElementById('agreement-modal').classList.remove('hidden')">
 <span class="material-symbols-outlined">add</span>
@@ -189,7 +187,7 @@
 <thead>
 <tr class="bg-surface-container-low">
 <th class="p-4 font-label-caps text-label-caps text-on-surface-variant">AGREEMENT</th>
-<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">CREATOR</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">SIGNATORIES</th>
 <th class="p-4 font-label-caps text-label-caps text-on-surface-variant">PERIOD</th>
 <th class="p-4 font-label-caps text-label-caps text-on-surface-variant">TARGETS</th>
 <th class="p-4 font-label-caps text-label-caps text-on-surface-variant">STATUS</th>
@@ -223,13 +221,13 @@
 </div>
 </div>
 </div>
-<div class="absolute -right-4 -bottom-4 opacity-10">
-<span class="material-symbols-outlined text-[120px]" style="font-variation-settings: 'FILL' 1;">shield</span>
 </div>
 </div>
+<!-- Recent agreement activity: full-width, under the table, scrollable -->
+<div class="col-span-12">
 <div class="bg-surface-container border border-outline-variant p-6 rounded-lg">
-<h3 class="font-title-sm text-title-sm text-primary mb-4">Audit Ledger</h3>
-<div class="space-y-6" id="ag-ledger">
+<h3 class="font-title-sm text-title-sm text-primary mb-4">Recent agreement activity</h3>
+<div class="space-y-6 max-h-64 overflow-y-auto custom-scrollbar pr-2" id="ag-ledger">
 <p class="text-xs text-on-surface-variant">Loading…</p>
 </div>
 </div>
@@ -253,7 +251,7 @@
 <!-- General Information -->
 <div class="grid grid-cols-2 gap-gutter">
 <div class="col-span-2">
-<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">SIGNATORIES (parties to the agreement)</label>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">PARTIES — all three (required for 2-of-3 verification)</label>
 <div id="ag-signatories" class="flex flex-col gap-2 bg-surface-container-low border border-outline-variant rounded p-3"></div>
 </div>
 <div>

@@ -55,6 +55,76 @@ describe("MACL end-to-end", () => {
     ).to.be.revertedWith("agreement finalised");
   });
 
+  // --- Draft editing: a DRAFT is mutable until finalisation (immutability begins at lock) ---
+
+  async function draftWithTargets() {
+    await agreement
+      .connect(donor)
+      .createAgreement(1000, 9_000_000_000, [donor.address, ngo.address, ministry.address]);
+    await agreement.connect(donor).addTarget(1, "t0", 1, "u", 9_000_000_000);
+    await agreement.connect(donor).addTarget(1, "t1", 2, "u", 9_000_000_000);
+    await agreement.connect(donor).addTarget(1, "t2", 3, "u", 9_000_000_000);
+  }
+
+  it("Draft edit: creator can edit a target and it reads back", async () => {
+    await draftWithTargets();
+    await agreement.connect(donor).editTarget(1, 0, "ind_b", 250, "households", 8_000_000_000);
+    const t = await agreement.getTarget(1, 0);
+    expect(t.indicator).to.equal("ind_b");
+    expect(t.threshold).to.equal(250);
+    expect(t.unit).to.equal("households");
+    expect(t.deadline).to.equal(8_000_000_000);
+  });
+
+  it("Draft edit: removeTarget deletes it and preserves the order of the rest", async () => {
+    await draftWithTargets();
+    await agreement.connect(donor).removeTarget(1, 1); // remove the middle one
+    expect(await agreement.targetCount(1)).to.equal(2);
+    expect((await agreement.getTarget(1, 0)).indicator).to.equal("t0");
+    expect((await agreement.getTarget(1, 1)).indicator).to.equal("t2"); // order preserved
+  });
+
+  it("Draft edit: updateDates changes the window and rejects end <= start", async () => {
+    await agreement
+      .connect(donor)
+      .createAgreement(1000, 2000, [donor.address, ngo.address, ministry.address]);
+    await agreement.connect(donor).updateDates(1, 5000, 6000);
+    const a = await agreement.getAgreement(1);
+    expect(a.startDate).to.equal(5000);
+    expect(a.endDate).to.equal(6000);
+    await expect(
+      agreement.connect(donor).updateDates(1, 9000, 9000)
+    ).to.be.revertedWith("end must be after start");
+  });
+
+  it("Draft edit: only the creator can edit/remove/update a draft", async () => {
+    await draftWithTargets();
+    await expect(
+      agreement.connect(ngo).editTarget(1, 0, "x", 1, "u", 9_000_000_000)
+    ).to.be.revertedWith("only creator");
+    await expect(agreement.connect(ngo).removeTarget(1, 0)).to.be.revertedWith("only creator");
+    await expect(agreement.connect(ngo).updateDates(1, 1, 2)).to.be.revertedWith("only creator");
+  });
+
+  it("Draft edit: editing is blocked once the agreement is finalised", async () => {
+    await setupFinalisedAgreement(500, 9_000_000_000);
+    await expect(
+      agreement.connect(donor).editTarget(1, 0, "x", 1, "u", 9_000_000_000)
+    ).to.be.revertedWith("agreement finalised");
+    await expect(agreement.connect(donor).removeTarget(1, 0)).to.be.revertedWith("agreement finalised");
+    await expect(agreement.connect(donor).updateDates(1, 1, 2)).to.be.revertedWith("agreement finalised");
+  });
+
+  it("Draft edit: a bad target index reverts", async () => {
+    await agreement
+      .connect(donor)
+      .createAgreement(1000, 9_000_000_000, [donor.address, ngo.address, ministry.address]);
+    await expect(
+      agreement.connect(donor).editTarget(1, 0, "x", 1, "u", 9_000_000_000)
+    ).to.be.revertedWith("bad target index");
+    await expect(agreement.connect(donor).removeTarget(1, 0)).to.be.revertedWith("bad target index");
+  });
+
   it("Compliance: PASS when reported value meets the threshold on time", async () => {
     await setupFinalisedAgreement(500, 9_000_000_000); // deadline far in future
     await compliance.connect(ngo).submitReport(1, 0, 600);

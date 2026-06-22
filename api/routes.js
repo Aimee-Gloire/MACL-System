@@ -30,6 +30,9 @@ function intParam(v, name) {
 const ACTION_ROLE = {
   "agreement.create": "donor",
   "agreement.addTarget": "donor",
+  "agreement.editTarget": "donor",
+  "agreement.removeTarget": "donor",
+  "agreement.updateDates": "donor",
   "agreement.finalise": "donor",
   "budget.set": "donor",
   "report.submit": "ngo",
@@ -107,6 +110,30 @@ function makeRouter(chain) {
     requireFields(req.body, ["indicator", "threshold", "unit", "deadline"]);
     res.json(await chain.addTarget(req.auth.role, intParam(req.params.id, "id"),
       req.body.indicator, req.body.threshold, req.body.unit, req.body.deadline));
+  }));
+
+  // Edit a target on a DRAFT agreement (creator/donor only; reverts once finalised).
+  r.post("/agreements/:id/targets/:index/edit", h(async (req, res) => {
+    requirePerm(req, "agreement.editTarget");
+    requireFields(req.body, ["indicator", "threshold", "unit", "deadline"]);
+    res.json(await chain.editTarget(req.auth.role, intParam(req.params.id, "id"),
+      intParam(req.params.index, "index"),
+      req.body.indicator, req.body.threshold, req.body.unit, req.body.deadline));
+  }));
+
+  // Remove a target from a DRAFT agreement.
+  r.post("/agreements/:id/targets/:index/remove", h(async (req, res) => {
+    requirePerm(req, "agreement.removeTarget");
+    res.json(await chain.removeTarget(req.auth.role, intParam(req.params.id, "id"),
+      intParam(req.params.index, "index")));
+  }));
+
+  // Update the start/end dates of a DRAFT agreement.
+  r.post("/agreements/:id/dates", h(async (req, res) => {
+    requirePerm(req, "agreement.updateDates");
+    requireFields(req.body, ["startDate", "endDate"]);
+    res.json(await chain.updateDates(req.auth.role, intParam(req.params.id, "id"),
+      req.body.startDate, req.body.endDate));
   }));
 
   r.post("/agreements/:id/finalise", h(async (req, res) => {

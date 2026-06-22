@@ -59,6 +59,9 @@ contract AgreementContract {
     event OrganisationRemoved(address indexed account);
     event AgreementCreated(uint256 indexed id, address indexed creator);
     event TargetAdded(uint256 indexed agreementId, string indicator, uint256 threshold);
+    event TargetEdited(uint256 indexed agreementId, uint256 index, string indicator, uint256 threshold);
+    event TargetRemoved(uint256 indexed agreementId, uint256 index);
+    event AgreementDatesUpdated(uint256 indexed agreementId, uint256 startDate, uint256 endDate);
     event AgreementFinalised(uint256 indexed id);
     event BudgetSet(uint256 indexed agreementId, uint256 budget);
     event SpendCommitted(uint256 indexed agreementId, uint256 amount, uint256 committedSpend);
@@ -154,6 +157,55 @@ contract AgreementContract {
         require(msg.sender == a.creator, "only creator");
         agreementTargets[agreementId].push(Target(indicator, threshold, unit, deadline));
         emit TargetAdded(agreementId, indicator, threshold);
+    }
+
+    /// @notice Edit an existing target on a DRAFT agreement (creator only).
+    /// @dev A draft is the mutable phase; immutability only begins at finalisation. Reports
+    ///      can only be submitted against a FINALISED agreement, so no compliance record can
+    ///      ever reference a draft target — editing one here is safe.
+    function editTarget(
+        uint256 agreementId,
+        uint256 index,
+        string calldata indicator,
+        uint256 threshold,
+        string calldata unit,
+        uint256 deadline
+    ) external {
+        Agreement storage a = agreements[agreementId];
+        require(a.id != 0, "no such agreement");
+        require(!a.finalised, "agreement finalised");
+        require(msg.sender == a.creator, "only creator");
+        Target[] storage ts = agreementTargets[agreementId];
+        require(index < ts.length, "bad target index");
+        ts[index] = Target(indicator, threshold, unit, deadline);
+        emit TargetEdited(agreementId, index, indicator, threshold);
+    }
+
+    /// @notice Remove a target from a DRAFT agreement (creator only); order is preserved.
+    function removeTarget(uint256 agreementId, uint256 index) external {
+        Agreement storage a = agreements[agreementId];
+        require(a.id != 0, "no such agreement");
+        require(!a.finalised, "agreement finalised");
+        require(msg.sender == a.creator, "only creator");
+        Target[] storage ts = agreementTargets[agreementId];
+        require(index < ts.length, "bad target index");
+        for (uint256 i = index; i + 1 < ts.length; i++) {
+            ts[i] = ts[i + 1];
+        }
+        ts.pop();
+        emit TargetRemoved(agreementId, index);
+    }
+
+    /// @notice Update the start/end dates of a DRAFT agreement (creator only).
+    function updateDates(uint256 agreementId, uint256 startDate, uint256 endDate) external {
+        Agreement storage a = agreements[agreementId];
+        require(a.id != 0, "no such agreement");
+        require(!a.finalised, "agreement finalised");
+        require(msg.sender == a.creator, "only creator");
+        require(endDate > startDate, "end must be after start");
+        a.startDate = startDate;
+        a.endDate = endDate;
+        emit AgreementDatesUpdated(agreementId, startDate, endDate);
     }
 
     /// @notice Set (or update) the programme budget for an agreement before it is finalised.

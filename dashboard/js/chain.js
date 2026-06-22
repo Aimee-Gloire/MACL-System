@@ -110,6 +110,12 @@ window.MACL = (function () {
           postTx("/agreements", { role: needRole(), startDate: String(startDate), endDate: String(endDate), signatories }),
         addTarget: (id, indicator, threshold, unit, deadline) =>
           postTx(`/agreements/${id}/targets`, { role: needRole(), indicator, threshold: String(threshold), unit, deadline: String(deadline) }),
+        editTarget: (id, index, indicator, threshold, unit, deadline) =>
+          postTx(`/agreements/${id}/targets/${index}/edit`, { role: needRole(), indicator, threshold: String(threshold), unit, deadline: String(deadline) }),
+        removeTarget: (id, index) =>
+          postTx(`/agreements/${id}/targets/${index}/remove`, { role: needRole() }),
+        updateDates: (id, startDate, endDate) =>
+          postTx(`/agreements/${id}/dates`, { role: needRole(), startDate: String(startDate), endDate: String(endDate) }),
         finaliseAgreement: (id) =>
           postTx(`/agreements/${id}/finalise`, { role: needRole() }),
         setBudget: (id, amount) =>

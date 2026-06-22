@@ -261,9 +261,20 @@ function makeChain(cfg) {
     }));
   }
 
-  async function agreementEvents(limit = 6) {
+  async function agreementEvents(limit = 25) {
     const evs = [];
-    for (const [name, label] of [["AgreementCreated", "created"], ["TargetAdded", "target added"], ["AgreementFinalised", "locked"]]) {
+    // Every agreement lifecycle event, so the activity feed matches what's actually possible
+    // (create, target add/edit/remove, date change, budget set, finalise).
+    const EVENT_TYPES = [
+      ["AgreementCreated", "created"],
+      ["TargetAdded", "target added"],
+      ["TargetEdited", "target edited"],
+      ["TargetRemoved", "target removed"],
+      ["AgreementDatesUpdated", "dates updated"],
+      ["BudgetSet", "budget set"],
+      ["AgreementFinalised", "locked"],
+    ];
+    for (const [name, label] of EVENT_TYPES) {
       const logs = await queryLogs(read.agreement, name);
       for (const log of logs) {
         const a = log.args;
@@ -404,6 +415,23 @@ function makeChain(cfg) {
     const { tx, receipt } = await send(c.finaliseAgreement(BigInt(id)));
     return { hash: tx.hash, blockNumber: receipt.blockNumber };
   }
+  // --- draft editing (creator only; reverts on a finalised agreement) ---
+  async function editTarget(role, id, index, indicator, threshold, unit, deadline) {
+    const c = writeContract("Agreement", signerFor(role));
+    const { tx, receipt } = await send(
+      c.editTarget(BigInt(id), BigInt(index), indicator, BigInt(threshold), unit, BigInt(deadline)));
+    return { hash: tx.hash, blockNumber: receipt.blockNumber };
+  }
+  async function removeTarget(role, id, index) {
+    const c = writeContract("Agreement", signerFor(role));
+    const { tx, receipt } = await send(c.removeTarget(BigInt(id), BigInt(index)));
+    return { hash: tx.hash, blockNumber: receipt.blockNumber };
+  }
+  async function updateDates(role, id, startDate, endDate) {
+    const c = writeContract("Agreement", signerFor(role));
+    const { tx, receipt } = await send(c.updateDates(BigInt(id), BigInt(startDate), BigInt(endDate)));
+    return { hash: tx.hash, blockNumber: receipt.blockNumber };
+  }
   async function setBudget(role, id, amount) {
     const c = writeContract("Agreement", signerFor(role));
     const { tx, receipt } = await send(c.setBudget(BigInt(id), BigInt(amount)));
@@ -474,6 +502,7 @@ function makeChain(cfg) {
     recentBlocks, agreementEvents, getNodeStates, getIntegrity, health,
     // writes
     createAgreement, addTarget, finaliseAgreement, setBudget, registerOrg,
+    editTarget, removeTarget, updateDates,
     submitReport, createSpendRequest, markSpent,
     endorseRecord, declineRecord, markRecordUnverified, endorseSpend, declineSpend,
   };
