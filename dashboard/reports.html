@@ -202,8 +202,8 @@
 <div class="space-y-1">
 <label class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Reported Value (whole number)</label>
 <div class="relative">
-<input class="w-full bg-surface-container-low border border-outline-variant rounded-lg p-3 text-body-md pr-12 focus:ring-primary focus:border-primary transition-all" id="value" placeholder="e.g. 1200" type="number" min="0" step="1"/>
-<span class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant opacity-50 material-symbols-outlined">data_object</span>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded-lg p-3 pr-24 text-body-md focus:ring-primary focus:border-primary transition-all" id="value" placeholder="e.g. 1200" type="number" min="0" step="1"/>
+<span class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-body-sm pointer-events-none" id="value-unit"></span>
 </div>
 </div>
 <div class="space-y-1">
@@ -214,7 +214,7 @@
 <div class="pt-4">
 <button data-perm="report.submit" class="w-full bg-primary text-white py-4 rounded-lg font-title-sm hover:bg-primary-container transition-all flex items-center justify-center gap-2" type="submit">
 <span class="material-symbols-outlined">send</span>
-                                SUBMIT TO LEDGER
+                                Submit report
                             </button>
 </div>
 </form>
@@ -260,7 +260,7 @@
 </div>
 </div>
 <!-- Past Reports Table -->
-<section class="col-span-12 bg-surface-container-lowest border border-outline-variant p-8">
+<section id="rp-past-section" class="col-span-12 bg-surface-container-lowest border border-outline-variant p-8">
 <div class="flex justify-between items-end mb-6">
 <div>
 <h3 class="font-title-sm text-title-sm text-primary">Past Reports</h3>

@@ -183,7 +183,9 @@ window.MACL_UI = (function () {
   };
   function injectGlossaryStyles() {
     const style = document.createElement("style");
-    style.textContent = "[data-help]{cursor:help}";
+    // Help cursor on labels, but keep the pointer on interactive controls that also carry a
+    // glossary term (e.g. the Endorse/Decline buttons), so they still look clickable.
+    style.textContent = "[data-help]{cursor:help} button[data-help],a[data-help]{cursor:pointer}";
     document.head.appendChild(style);
   }
   function tip(el) {

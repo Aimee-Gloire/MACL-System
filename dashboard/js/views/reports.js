@@ -6,13 +6,22 @@
 MACL_UI.ready(async () => {
   const acting = MACL.getRole();
 
-  // Role scoping: only the NGO submits reports. Donor/Audit see the explainers and their
-  // (own, empty) past reports here; their full view of all records is the Audit Trail page.
+  // Role scoping: only the NGO submits reports. Donor/Audit don't submit, so hide the form and
+  // replace the (always-empty) "Past Reports" table with a pointer to the Audit Trail — their
+  // shared full view of all records (proposal §3.5).
   if (!MACL.can("report.submit")) {
     const form = document.getElementById("rp-form-section");
     const side = document.getElementById("rp-side");
     if (form) form.style.display = "none";
     if (side) side.classList.replace("lg:col-span-7", "lg:col-span-12");
+    const past = document.getElementById("rp-past-section");
+    if (past) past.innerHTML = `<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary">history_edu</span>
+<div>
+<h3 class="font-title-sm text-title-sm text-primary">Compliance records</h3>
+<p class="text-body-sm text-on-surface-variant mt-1">Your organisation doesn't submit reports. View the full record of all compliance reports on the <a href="audit.html" class="text-primary font-semibold hover:underline">Audit Trail →</a></p>
+</div>
+</div>`;
   }
 
   let finalised = []; // finalised agreements with targets, for the cascade
@@ -34,6 +43,17 @@ MACL_UI.ready(async () => {
     });
   }
 
+  // A recognisable label for an agreement (lead with the first target's indicator + years),
+  // matching the Budget & Spend dropdowns so the submitter can tell programmes apart.
+  function agreementLabel(r) {
+    const ts = r.targets || [];
+    const ind = ts.length ? (ts[0].indicator || "target") : "—";
+    const short = ind.length > 24 ? ind.slice(0, 23) + "…" : ind;
+    const what = ts.length > 1 ? `${short} (+${ts.length - 1} more)` : short;
+    const yr = (d) => new Date(Number(d) * 1000).getFullYear();
+    return `#${r.id} · ${what} · ${yr(r.a.startDate)}→${yr(r.a.endDate)}`;
+  }
+
   // --- populate agreement select (finalised only)
   async function loadSelects() {
     const all = await MACL.fetchAgreements();
@@ -41,7 +61,7 @@ MACL_UI.ready(async () => {
     const agSel = document.getElementById("agreement");
     agSel.innerHTML = finalised.length
       ? `<option disabled selected value="">Choose a finalised agreement…</option>` +
-        finalised.map((r) => `<option value="${r.id}">Agreement #${r.id} (${r.targets.length} target${r.targets.length === 1 ? "" : "s"})</option>`).join("")
+        finalised.map((r) => `<option value="${r.id}">${MACL.esc(agreementLabel(r))}</option>`).join("")
       : `<option disabled selected value="">No finalised agreements yet</option>`;
     agSel.onchange = onPickAgreement;
   }
@@ -60,14 +80,19 @@ MACL_UI.ready(async () => {
     const idx = document.getElementById("target").value;
     const ag = finalised.find((r) => r.id === id);
     const t = ag && ag.targets[Number(idx)];
-    document.getElementById("target-info").innerHTML = t
-      ? `Needs <b>≥ ${t.threshold} ${MACL.esc(t.unit)}</b> by ${MACL.fmtTs(t.deadline)}`
-      : "";
+    const unitEl = document.getElementById("value-unit");
+    if (unitEl) unitEl.textContent = t ? t.unit : "";
+    const info = document.getElementById("target-info");
+    if (!t) { info.innerHTML = ""; return; }
+    const past = Number(t.deadline) * 1000 < Date.now();
+    info.innerHTML = `Needs <b>≥ ${t.threshold} ${MACL.esc(t.unit)}</b> by ${MACL.fmtTs(t.deadline)}`
+      + (past ? ` <span class="text-amber-600 font-semibold">— deadline passed; meeting it now will be FLAGGED.</span>` : "");
   }
 
   // --- past reports by the acting account
   async function loadPast() {
     const tbody = document.getElementById("rp-rows");
+    if (!tbody) return; // non-NGO: the Past Reports table is replaced by a pointer callout
     const mine = MACL.roleMeta().address.toLowerCase();
     const rows = (await MACL.fetchRecords()).filter((r) => r.rec.submitter.toLowerCase() === mine);
     if (!rows.length) {
@@ -135,9 +160,23 @@ MACL_UI.ready(async () => {
     const fh = document.getElementById("rp-filehash");
     if (fh) fh.textContent = "Optional — no file selected.";
 
+    // Clear the entry fields for the next report (the result card below stays as confirmation).
+    document.getElementById("value").value = "";
+    document.getElementById("agreement").selectedIndex = 0;
+    onPickAgreement(); // resets the dependent target dropdown
+    const vu = document.getElementById("value-unit"); if (vu) vu.textContent = "";
+    const ti = document.getElementById("target-info"); if (ti) ti.innerHTML = "";
+
     // the API returns the on-chain evaluation (parsed from the RecordEvaluated event)
     showResult(MACL.fmtResult(receipt.result), receipt.recordId, receipt);
     await loadPast();
+  });
+
+  // Starting a new entry hides the previous result card, so a stale result never lingers over
+  // fresh input. (The programmatic resets above don't fire 'input', so the card survives submit.)
+  document.getElementById("reportForm").addEventListener("input", () => {
+    const card = document.getElementById("resultCard");
+    if (card) card.classList.add("hidden");
   });
 
   function showResult(label, recordId, receipt) {

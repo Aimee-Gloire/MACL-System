@@ -1,5 +1,5 @@
 /*
- * Budget & Spend page — Part 1's contract logic, in the browser.
+ * Budget & Spend page — Part 1's budget + spend flow (via the Tier-2 REST API).
  *  - Donor sets a budget on a DRAFT agreement (locks at finalisation).
  *  - NGO raises a spend request (amount, purpose, supporting-document fingerprint).
  *    The document is uploaded to the server, which returns its SHA-256 — only that hash
@@ -249,10 +249,12 @@ MACL_UI.ready(async () => {
 <button data-endorse="${id}" data-perm="spend.endorse" data-help="endorse" onclick="event.stopPropagation()" class="bg-primary text-white px-2.5 py-1 rounded text-xs font-semibold hover:opacity-90 active:scale-95 transition-all">Endorse</button>
 <button data-decline="${id}" data-perm="spend.decline" data-help="decline" onclick="event.stopPropagation()" class="border border-error text-error px-2.5 py-1 rounded text-xs font-semibold hover:bg-error hover:text-white active:scale-95 transition-all">Decline</button>
 </div>`;
+      } else if (s === "APPROVED" && isSubmitter) {
+        action = `<span class="text-[10px] text-amber-600 font-semibold flex items-center gap-1 mt-1"><span class="material-symbols-outlined text-sm">receipt_long</span>Receipt needed — open to record it</span>`;
       }
 
       const summary = `<tr class="hover:bg-surface-container-low cursor-pointer transition-colors group" onclick="toggleRow('spend-${id}')">
-<td class="px-6 py-5"><div class="flex flex-col"><span class="font-semibold text-on-surface">Request #${id}</span><span class="text-xs text-on-surface-variant font-code-metadata">Agreement #${r.req.agreementId}</span>${progFailing ? `<span class="text-[10px] text-amber-600 mt-0.5" title="This programme has a failing compliance record. Spend is not blocked; the 2-of-3 approval decides.">⚠ programme failing targets</span>` : ""}</div></td>
+<td class="px-6 py-5"><div class="flex flex-col"><span class="font-semibold text-on-surface">Request #${id}</span><span class="text-xs text-on-surface-variant font-code-metadata">Agreement #${r.req.agreementId}</span>${progFailing ? `<span class="text-[10px] text-amber-600 mt-0.5" title="This programme has a failing compliance record. Spend is not blocked; the 2-of-3 approval decides.">⚠ has a failing compliance record</span>` : ""}</div></td>
 <td class="px-6 py-5 text-on-surface-variant">${MACL.esc(r.req.purpose)}</td>
 <td class="px-6 py-5 text-right font-code-metadata text-sm">${MACL.fmtMoney(r.req.amount)}</td>
 <td class="px-6 py-5">${badge}</td>
@@ -304,6 +306,7 @@ MACL_UI.ready(async () => {
 <h4 class="text-label-caps text-on-surface-variant border-b border-outline-variant pb-2">SETTLEMENT — RECORD THE RECEIPT</h4>
 <p class="text-xs text-on-surface-variant mt-2">Approved 2-of-3. After the funds move through normal banking, pin the ACTUAL receipt's fingerprint to close this out. The receipt is uploaded to the server and only its SHA-256 is recorded on-chain — never the file itself.</p>
 <div class="mt-3 flex flex-wrap items-center gap-2">
+<span class="w-full text-[11px] text-on-surface-variant">Receipt file</span>
 <input type="file" data-receipt="${id}" class="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary-container file:text-white file:px-2 file:py-1 file:text-[11px]"/>
 <button data-mark-spent="${id}" class="bg-primary text-white px-3 py-1.5 rounded text-xs font-semibold hover:opacity-90 active:scale-95 transition-all">Mark as spent</button>
 </div>
@@ -362,7 +365,7 @@ ${settlementBlock}
     );
   }
 
-  // Hash the chosen receipt file in the browser, then pin its SHA-256 on-chain.
+  // Upload the chosen receipt to the server, which returns its SHA-256 to pin on-chain.
   async function markSpent(id) {
     const inp = document.querySelector(`input[data-receipt="${id}"]`);
     const file = inp && inp.files[0];
@@ -422,6 +425,7 @@ ${settlementBlock}
     document.getElementById("spendForm").reset();
     pendingHash = null;
     set("sp-filehash", "No file selected.");
+    onPickFundable(); // clear the remaining-budget + compliance-warn lines after reset
     await loadAll();
   });
 

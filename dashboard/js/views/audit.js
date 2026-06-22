@@ -143,6 +143,13 @@ MACL_UI.ready(async () => {
 <button data-decline="${id}" data-perm="record.decline" data-help="decline" onclick="event.stopPropagation()" class="border border-error text-error px-2.5 py-1 rounded text-xs font-semibold hover:bg-error hover:text-white active:scale-95 transition-all">Decline</button>
 </div>`;
       }
+      // A finalised record can still take a 3rd endorsement for a complete audit trail
+      // (proposal §5.3): Endorse only (no decline), only for a signatory who hasn't acted yet.
+      if (r.rec.finalised && !r.endorsedByActing && !r.declinedByActing) {
+        action = `<div class="flex gap-1 mt-1 no-print">
+<button data-endorse="${id}" data-perm="record.endorse" data-help="endorse" title="Add your endorsement for the audit trail — the record is already finalised, this won't change its status." onclick="event.stopPropagation()" class="border border-primary text-primary px-2.5 py-1 rounded text-xs font-semibold hover:bg-primary hover:text-white active:scale-95 transition-all">Endorse for the record</button>
+</div>`;
+      }
 
       const summary = `<tr class="hover:bg-surface-container-low cursor-pointer transition-colors group" onclick="toggleRow('row-${id}')">
 <td class="px-6 py-5"><div class="flex flex-col"><span class="font-semibold text-on-surface">Record #${id}</span><span class="text-xs text-on-surface-variant font-code-metadata">Agreement #${r.rec.agreementId}</span></div></td>

@@ -191,7 +191,9 @@ window.MACL = (function () {
   function fmtTs(sec) {
     const n = Number(sec);
     if (!n) return "—";
-    return new Date(n * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+    // Display in Central Africa Time (Rwanda) = UTC+2, no daylight saving. Shift the unix
+    // time by +2h, then format the resulting wall-clock as ISO and label it CAT.
+    return new Date((n + 2 * 3600) * 1000).toISOString().slice(0, 16).replace("T", " ") + " CAT";
   }
   function toUnix(localStr) {
     if (!localStr) return 0;

@@ -103,6 +103,13 @@ MACL_UI.ready(async () => {
           text: `Spend request #${s.req.id} (${MACL.fmtMoney(s.req.amount)}) needs your approval` });
       }
     }
+    // Approved spend you raised that still needs its receipt recorded (closes the spend loop)
+    for (const s of spend) {
+      if (s.req.approved && !s.req.spent && s.req.requester.toLowerCase() === me) {
+        actions.push({ icon: "receipt_long", href: "spend.html", cta: "Settle",
+          text: `Spend request #${s.req.id} (${MACL.fmtMoney(s.req.amount)}) is approved — record the receipt` });
+      }
+    }
     // Agreements you created that have targets but aren't finalised yet
     for (const a of agreements) {
       if (!a.finalised && a.a.creator.toLowerCase() === me && a.targets.length > 0) {

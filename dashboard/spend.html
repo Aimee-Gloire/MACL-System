@@ -234,7 +234,10 @@ A supporting document (quotation, invoice or PO) can be attached: only its SHA-2
 </div>
 <div class="space-y-1">
 <label class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Amount (RWF)</label>
-<input class="w-full bg-surface-container-low border border-outline-variant rounded-lg p-3 text-body-md" id="sp-amount" placeholder="e.g. 400000" type="number" min="1" step="1"/>
+<div class="relative">
+<input class="w-full bg-surface-container-low border border-outline-variant rounded-lg p-3 pr-16 text-body-md" id="sp-amount" placeholder="e.g. 400000" type="number" min="1" step="1"/>
+<span class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-body-sm pointer-events-none">RWF</span>
+</div>
 <p class="text-xs text-error mt-1 hidden" id="sp-amount-err">Exceeds the remaining budget.</p>
 </div>
 <div class="space-y-1">
@@ -245,7 +248,7 @@ A supporting document (quotation, invoice or PO) can be attached: only its SHA-2
 <div class="space-y-1">
 <label class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Supporting document (uploaded; fingerprint recorded on-chain)</label>
 <input class="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-body-sm file:mr-3 file:rounded file:border-0 file:bg-primary-container file:text-white file:px-3 file:py-1.5 file:text-xs file:font-semibold" id="sp-file" type="file"/>
-<p class="text-xs font-code-metadata text-on-surface-variant mt-1 break-all" id="sp-filehash">No file selected — attach a quotation/invoice/PO now, or leave it out and add one later.</p>
+<p class="text-xs font-code-metadata text-on-surface-variant mt-1 break-all" id="sp-filehash">No file selected — attach a quotation/invoice/PO now (it can only be added when you raise the request, not afterwards).</p>
 </div>
 <div class="pt-2">
 <button id="sp-submit" data-perm="spend.request" class="w-full bg-primary text-white py-3 rounded-lg font-title-sm hover:bg-primary-container transition-all flex items-center justify-center gap-2 disabled:opacity-50" type="submit">
