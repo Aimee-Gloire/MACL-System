@@ -177,6 +177,9 @@ window.MACL_UI = (function () {
     unverified: "Unverified = a terminal state. The verification window passed without 2-of-3 endorsement, so the record was closed as unverified instead of finalised.",
     committed: "Committed = spend approved 2-of-3 and locked against the budget — the money is earmarked but may not have moved yet.",
     spent: "Spent = an approved request that has been settled — the funds moved (through normal banking) and a receipt fingerprint was recorded.",
+    records: "Total records = every compliance report on the ledger, in any state (pending, finalised, disputed or unverified).",
+    awaiting: "Awaiting endorsement = records still below the 2-of-3 threshold and not yet closed — they still need endorsements to finalise.",
+    rate: "Compliance rate = the share of all reports that evaluated PASS (met the target on time); the exact count is shown beneath it.",
   };
   function injectGlossaryStyles() {
     const style = document.createElement("style");

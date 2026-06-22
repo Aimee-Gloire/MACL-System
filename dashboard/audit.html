@@ -175,7 +175,7 @@
 <!-- Top Bar -->
 <header class="w-full sticky top-0 z-40 bg-surface border-b border-outline-variant flex justify-between items-center px-margin-desktop py-4">
 <div class="flex items-center gap-stack-lg">
-<h2 class="font-headline-md text-headline-md font-bold text-primary">Compliance Ledger</h2>
+<h2 class="font-headline-md text-headline-md font-bold text-primary">Audit Trail</h2>
 </div>
 <div class="flex items-center gap-4">
 <div id="macl-rolebar" class="flex items-center gap-2"></div>
@@ -186,7 +186,6 @@
 <!-- Page Header -->
 <div class="flex justify-between items-end">
 <div>
-<h3 class="font-display-lg text-display-lg text-on-surface">Audit Trail</h3>
 <p class="text-on-surface-variant">Immutable ledger of all compliance records and their endorsements.</p>
 </div>
 <div class="flex gap-stack-sm no-print">
@@ -203,20 +202,40 @@
 <!-- Stats Overview (Bento Style) -->
 <div class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
 <div class="bg-surface-container-lowest p-6 border border-outline-variant flex flex-col gap-2">
-<span class="text-label-caps text-on-surface-variant">TOTAL RECORDS</span>
+<span data-help="records" class="text-label-caps text-on-surface-variant underline decoration-dotted">TOTAL RECORDS</span>
 <span class="text-headline-md font-bold text-primary" id="au-total">—</span>
 <span class="text-body-sm text-on-surface-variant">compliance reports on the ledger</span>
 </div>
 <div class="bg-surface-container-lowest p-6 border border-outline-variant flex flex-col gap-2">
-<span class="text-label-caps text-on-surface-variant">AWAITING ENDORSEMENT</span>
+<span data-help="awaiting" class="text-label-caps text-on-surface-variant underline decoration-dotted">AWAITING ENDORSEMENT</span>
 <span class="text-headline-md font-bold text-secondary" id="au-pending">—</span>
 <span class="text-body-sm text-on-surface-variant">below 2-of-3 threshold</span>
 </div>
 <div class="bg-surface-container-lowest p-6 border border-outline-variant flex flex-col gap-2">
-<span class="text-label-caps text-on-surface-variant">COMPLIANCE RATE</span>
+<span data-help="rate" class="text-label-caps text-on-surface-variant underline decoration-dotted">COMPLIANCE RATE</span>
 <span class="text-headline-md font-bold text-primary" id="au-rate">—</span>
 <span class="text-body-sm text-on-surface-variant" id="au-rate-note">PASS over all reports</span>
 </div>
+</div>
+<!-- Search / filter — the read-only query interface (proposal §3.5) -->
+<div class="flex flex-wrap items-center gap-3 no-print">
+<div class="relative flex-1 min-w-[240px]">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+<input id="au-search" type="text" placeholder="Search by record #, agreement # or indicator…" class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg pl-10 pr-3 py-2.5 text-body-sm"/>
+</div>
+<select id="au-filter-result" class="bg-surface-container-lowest border border-outline-variant rounded-lg pl-3 pr-9 py-2.5 text-body-sm">
+<option value="">All results</option>
+<option value="PASS">PASS</option>
+<option value="FAIL">FAIL</option>
+<option value="FLAG">FLAG</option>
+</select>
+<select id="au-filter-status" class="bg-surface-container-lowest border border-outline-variant rounded-lg pl-3 pr-9 py-2.5 text-body-sm">
+<option value="">All statuses</option>
+<option value="finalised">Finalised</option>
+<option value="pending">In progress</option>
+<option value="disputed">Disputed</option>
+<option value="unverified">Unverified</option>
+</select>
 </div>
 <!-- Audit Table -->
 <div class="bg-surface-container-lowest border border-outline-variant overflow-hidden">

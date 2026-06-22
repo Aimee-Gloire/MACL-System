@@ -5,12 +5,20 @@
  */
 MACL_UI.ready(async () => {
   const acting = MACL.getRole();
-  document.getElementById("rp-breadcrumb").textContent = MACL.roleMeta(acting).label + " Console";
+
+  // Role scoping: only the NGO submits reports. Donor/Audit see the explainers and their
+  // (own, empty) past reports here; their full view of all records is the Audit Trail page.
+  if (!MACL.can("report.submit")) {
+    const form = document.getElementById("rp-form-section");
+    const side = document.getElementById("rp-side");
+    if (form) form.style.display = "none";
+    if (side) side.classList.replace("lg:col-span-7", "lg:col-span-12");
+  }
 
   let finalised = []; // finalised agreements with targets, for the cascade
-  let pendingHash = null; // SHA-256 of an optional evidence file, computed in-browser
+  let pendingHash = null; // SHA-256 of an optional evidence file (hashed server-side)
 
-  // Hash any attached evidence file locally; only its fingerprint is ever sent.
+  // Upload any attached evidence to the server, which returns its SHA-256 for the chain.
   const fileInput = document.getElementById("rp-file");
   if (fileInput) {
     fileInput.addEventListener("change", async (e) => {
@@ -57,26 +65,18 @@ MACL_UI.ready(async () => {
       : "";
   }
 
-  // --- recent blocks (honest replacement for the fake "Real-time Chain")
-  async function loadBlocks() {
-    const host = document.getElementById("rp-blocks");
-    if (!host) return;
-    // The API returns the most recent blocks (number + tx count).
-    const blks = await MACL.recentBlocks(3);
-    host.innerHTML = blks.map((b) =>
-      `<div class="flex justify-between items-center border-b border-white/10 pb-2">
-        <span class="text-[10px] font-code-metadata opacity-60">BLOCK #${b.number}</span>
-        <span class="text-[10px] font-code-metadata">${b.txCount} tx</span>
-      </div>`).join("");
-  }
-
   // --- past reports by the acting account
   async function loadPast() {
     const tbody = document.getElementById("rp-rows");
     const mine = MACL.roleMeta().address.toLowerCase();
     const rows = (await MACL.fetchRecords()).filter((r) => r.rec.submitter.toLowerCase() === mine);
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">No reports submitted by ${MACL.esc(MACL.roleMeta().label)} yet.</td></tr>`;
+      // Role-aware empty state: the NGO can still submit ("yet"); the Donor/Audit never submit,
+      // so don't imply they might — point them to the full record instead.
+      const msg = MACL.can("report.submit")
+        ? `No reports submitted by ${MACL.esc(MACL.roleMeta().label)} yet.`
+        : `Only the NGO submits reports — see the <a href="audit.html" class="text-primary hover:underline">Audit Trail</a> for the full record of all reports.`;
+      tbody.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">${msg}</td></tr>`;
       return;
     }
     const pillClass = { PASS: "status-pill-pass", FAIL: "status-pill-fail", FLAG: "status-pill-flag", PENDING: "" };
@@ -138,7 +138,6 @@ MACL_UI.ready(async () => {
     // the API returns the on-chain evaluation (parsed from the RecordEvaluated event)
     showResult(MACL.fmtResult(receipt.result), receipt.recordId, receipt);
     await loadPast();
-    await loadBlocks();
   });
 
   function showResult(label, recordId, receipt) {
@@ -165,6 +164,5 @@ MACL_UI.ready(async () => {
   }
 
   await loadSelects();
-  await loadBlocks();
   await loadPast();
 });

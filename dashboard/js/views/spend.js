@@ -213,7 +213,7 @@ MACL_UI.ready(async () => {
 
     const body = document.getElementById("sp-rows");
     if (!requests.length) {
-      body.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">No spend requests yet — sign in as the NGO to raise one above (the other two organisations then approve it).</td></tr>`;
+      body.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">No spend requests yet. Once the NGO raises one, the other two organisations approve it (2-of-3).</td></tr>`;
       return;
     }
     const actingLabel = acting.label;

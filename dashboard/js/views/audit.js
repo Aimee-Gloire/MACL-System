@@ -24,12 +24,11 @@ MACL_UI.ready(async () => {
     }
 
     const pass = rows.filter((r) => MACL.fmtResult(r.rec.result) === "PASS").length;
-    const pending = rows.filter((r) => !r.rec.finalised).length;
+    const pending = rows.filter((r) => !r.rec.finalised && !r.rec.unverified).length;
     set("au-total", rows.length.toLocaleString());
     set("au-pending", pending.toLocaleString());
     set("au-rate", rows.length ? `${Math.round((pass / rows.length) * 100)}%` : "—");
     set("au-rate-note", rows.length ? `${pass}/${rows.length} reports PASS` : "no reports yet");
-    set("au-count", `${rows.length} record${rows.length === 1 ? "" : "s"}`);
     try {
       const cid = (await MACL.getChainId()).toString();
       set("au-foot-chain", `CHAIN ${cid}`);
@@ -66,16 +65,47 @@ MACL_UI.ready(async () => {
     return `<span class="inline-flex items-center gap-1 text-[10px] text-primary mt-1" title="${MACL.esc(integ.detail)}"><span class="material-symbols-outlined text-xs">verified</span>${MACL.esc(integ.label)}</span>`;
   };
 
+  // Client-side search/filter over the records already fetched (proposal §3.5 "searchable").
+  function statusKey(r) {
+    if (r.rec.finalised) return "finalised";
+    if (r.rec.unverified) return "unverified";
+    if (Number(r.declines) > 0) return "disputed";
+    return "pending";
+  }
+  function filteredRows() {
+    const el = (id) => document.getElementById(id);
+    const q = ((el("au-search") && el("au-search").value) || "").trim().toLowerCase();
+    const fr = (el("au-filter-result") && el("au-filter-result").value) || "";
+    const fs = (el("au-filter-status") && el("au-filter-status").value) || "";
+    return rows.filter((r) => {
+      if (fr && MACL.fmtResult(r.rec.result) !== fr) return false;
+      if (fs && statusKey(r) !== fs) return false;
+      if (q) {
+        const hay = `record #${r.rec.id} agreement #${r.rec.agreementId} ${r.target.indicator}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
   function renderTable() {
     const body = document.getElementById("au-rows");
+    const list = filteredRows();
+    set("au-count", rows.length === list.length
+      ? `${rows.length} record${rows.length === 1 ? "" : "s"}`
+      : `${list.length} of ${rows.length} records`);
     if (!rows.length) {
-      body.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">No records yet — sign in as the NGO and submit a report to start the verification trail.</td></tr>`;
+      body.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">No records yet. Once the NGO submits its first report, the verification trail appears here.</td></tr>`;
+      return;
+    }
+    if (!list.length) {
+      body.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="7">No records match your search or filters.</td></tr>`;
       return;
     }
     const acting = MACL.getRole();
     const actingLabel = MACL.roleMeta(acting).label;
 
-    body.innerHTML = rows.map((r) => {
+    body.innerHTML = list.map((r) => {
       const id = r.rec.id.toString();
       const label = MACL.fmtResult(r.rec.result);
       const count = Number(r.count);
@@ -203,6 +233,12 @@ ${MACL.hasHash(r.rec.documentHash) ? `<div class="bg-surface-container-lowest p-
       r.rec.finalised, r.blockHash, r.rec.submitter, MACL.fmtTs(r.rec.evaluatedAt),
     ])
   );
+
+  // Re-render as the auditor searches/filters (client-side; the stat cards stay full-ledger).
+  ["au-search", "au-filter-result", "au-filter-status"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", renderTable);
+  });
 
   await load();
 });

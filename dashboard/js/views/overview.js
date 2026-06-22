@@ -126,7 +126,7 @@ MACL_UI.ready(async () => {
   if (tbody) {
     if (!records.length) {
       tbody.innerHTML =
-        `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="5">No reports yet. Sign in as the Donor to create an agreement, then as the NGO to submit the first report.</td></tr>`;
+        `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="5">No reports yet. Activity appears here once a Donor creates an agreement and the NGO reports against it.</td></tr>`;
     } else {
       const pill = (label) => {
         const c = { PASS: "bg-green-100 text-green-800", FAIL: "bg-red-100 text-red-800",
