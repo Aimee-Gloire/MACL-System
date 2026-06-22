@@ -162,12 +162,6 @@
 <header class="w-full sticky top-0 z-40 bg-surface border-b border-outline-variant flex justify-between items-center px-margin-desktop py-4 max-w-container-max mx-auto">
 <div class="flex items-center gap-4">
 <h2 class="font-headline-md text-headline-md font-bold text-primary">Budget &amp; Spend</h2>
-<div class="h-6 w-[1px] bg-outline-variant mx-2"></div>
-<div class="flex items-center gap-2 text-on-surface-variant font-body-sm">
-<span id="sp-acting">Console</span>
-<span class="material-symbols-outlined text-sm">chevron_right</span>
-<span class="font-medium text-primary">Spend Approval</span>
-</div>
 </div>
 <div class="flex items-center gap-6">
 <div id="macl-rolebar" class="flex items-center gap-2"></div>
@@ -177,18 +171,34 @@
 <!-- Honest framing banner -->
 <div class="mb-stack-lg bg-secondary-container/40 border border-outline-variant rounded-lg p-4 flex items-start gap-3">
 <span class="material-symbols-outlined text-secondary">info</span>
-<p class="text-body-sm text-on-surface-variant">No money moves on-chain. MACL only <b>records</b> a budget and <b>approves</b> spend
-requests against it (2-of-3). A spend request attaches a <b>supporting document</b> (a quotation,
-proforma invoice, purchase order or cost breakdown) that justifies the spend — not a receipt, as
-the money has not been spent yet. The file stays on your machine; only its SHA-256 <b>fingerprint</b>
-is stored, so anyone can later prove the document has not been altered or swapped after approval.</p>
+<p class="text-body-sm text-on-surface-variant">No money moves on-chain — MACL only <b>records</b> a budget and <b>approves</b> spend requests against it (2-of-3).
+A supporting document (quotation, invoice or PO) can be attached: only its SHA-256 <b>fingerprint</b> is stored on-chain (never the file), so it can later be re-verified as unaltered.</p>
 </div>
 
 <div class="bento-grid">
+<!-- Portfolio totals across all agreements (read-only; visible to every role) -->
+<section class="col-span-12 grid grid-cols-2 md:grid-cols-4 gap-stack-md">
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-5">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Total budgeted</span>
+<div class="font-headline-md text-headline-md text-primary mt-1" id="pf-budget">—</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-5">
+<span data-help="committed" class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider underline decoration-dotted">Committed</span>
+<div class="font-headline-md text-headline-md text-on-surface mt-1" id="pf-committed">—</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-5">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Remaining</span>
+<div class="font-headline-md text-headline-md text-primary mt-1" id="pf-remaining">—</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-5">
+<span data-help="spent" class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider underline decoration-dotted">Spent</span>
+<div class="font-headline-md text-headline-md text-on-surface mt-1" id="pf-spent">—</div>
+</div>
+</section>
 <!-- Set budget (Donor) -->
-<section class="col-span-12 lg:col-span-5 bg-surface-container-lowest border border-outline-variant p-8">
+<section id="bd-section" class="col-span-12 lg:col-span-5 bg-surface-container-lowest border border-outline-variant p-8">
 <h3 class="font-title-sm text-title-sm text-primary mb-1">Set programme budget</h3>
-<p class="text-body-sm text-on-surface-variant mb-6">Donor-Admin only. A budget can be set or changed while the agreement is still a <b>draft</b>; it locks once the agreement is finalised.</p>
+<p class="text-body-sm text-on-surface-variant mb-6">Donor only. A budget can be set or changed while the agreement is still a <b>draft</b>; it locks once the agreement is finalised.</p>
 <form class="space-y-stack-md" id="budgetForm" data-perm="budget.set">
 <div class="space-y-1">
 <label class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Draft Agreement</label>
@@ -209,9 +219,9 @@ is stored, so anyone can later prove the document has not been altered or swappe
 </section>
 
 <!-- Raise spend request (NGO) -->
-<section class="col-span-12 lg:col-span-7 bg-surface-container-lowest border border-outline-variant p-8">
+<section id="sp-section" class="col-span-12 lg:col-span-7 bg-surface-container-lowest border border-outline-variant p-8">
 <h3 class="font-title-sm text-title-sm text-primary mb-1">Raise a spend request</h3>
-<p class="text-body-sm text-on-surface-variant mb-6">NGO only. Pick a finalised, budgeted agreement, then attach a supporting document — its fingerprint is computed <b>in your browser</b> and the file never leaves your machine.</p>
+<p class="text-body-sm text-on-surface-variant mb-6">NGO only. Pick a finalised, budgeted agreement, then attach a supporting document — it is uploaded to the server and only its SHA-256 <b>fingerprint</b> is recorded on-chain (never the file itself).</p>
 <form class="space-y-stack-md" id="spendForm" data-perm="spend.request">
 <div class="grid grid-cols-1 md:grid-cols-2 gap-stack-md">
 <div class="space-y-1 md:col-span-2">
@@ -233,7 +243,7 @@ is stored, so anyone can later prove the document has not been altered or swappe
 </div>
 </div>
 <div class="space-y-1">
-<label class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Supporting document (hashed locally)</label>
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Supporting document (uploaded; fingerprint recorded on-chain)</label>
 <input class="w-full bg-surface-container-low border border-outline-variant rounded-lg p-2.5 text-body-sm file:mr-3 file:rounded file:border-0 file:bg-primary-container file:text-white file:px-3 file:py-1.5 file:text-xs file:font-semibold" id="sp-file" type="file"/>
 <p class="text-xs font-code-metadata text-on-surface-variant mt-1 break-all" id="sp-filehash">No file selected — attach a quotation/invoice/PO now, or leave it out and add one later.</p>
 </div>
@@ -272,9 +282,12 @@ is stored, so anyone can later prove the document has not been altered or swappe
 <div class="p-6 border-b border-outline-variant flex justify-between items-center">
 <div>
 <h3 class="font-title-sm text-title-sm text-primary">Spend requests</h3>
-<p class="text-body-sm text-on-surface-variant">Approved only after 2-of-3 organisations endorse. Click a row to verify its receipt.</p>
+<p class="text-body-sm text-on-surface-variant">Approved only after 2-of-3 organisations endorse. Click a row for evidence and approvals.</p>
 </div>
+<div class="flex items-center gap-4">
+<button id="sp-export" class="text-sm font-medium text-secondary hover:text-primary transition-colors">Export (CSV)</button>
 <span class="text-sm text-on-surface-variant font-code-metadata" id="sp-count"></span>
+</div>
 </div>
 <div class="overflow-x-auto">
 <table class="w-full text-left border-collapse">

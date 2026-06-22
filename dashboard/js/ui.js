@@ -175,6 +175,8 @@ window.MACL_UI = (function () {
     integrity: "Integrity check = each of the three nodes is asked for this record and the copies are compared. 'Verified across 3 nodes' means all agree.",
     expired: "Window passed = the verification window elapsed before 2 of 3 endorsed. The record can no longer be finalised; a signatory should mark it Unverified.",
     unverified: "Unverified = a terminal state. The verification window passed without 2-of-3 endorsement, so the record was closed as unverified instead of finalised.",
+    committed: "Committed = spend approved 2-of-3 and locked against the budget — the money is earmarked but may not have moved yet.",
+    spent: "Spent = an approved request that has been settled — the funds moved (through normal banking) and a receipt fingerprint was recorded.",
   };
   function injectGlossaryStyles() {
     const style = document.createElement("style");
@@ -210,11 +212,11 @@ window.MACL_UI = (function () {
   // enforces the real-world division of duties itself. Gating is per ACTION
   // (config.PERMISSIONS), never per page — every role still SEES every page.
   const PERM_MSG = {
-    "agreement.create":    "Only the Donor-Admin can create agreements.",
-    "agreement.addTarget": "Only the Donor-Admin can add targets.",
-    "agreement.finalise":  "Only the Donor-Admin can finalise (lock) agreements.",
+    "agreement.create":    "Only the Donor can create agreements.",
+    "agreement.addTarget": "Only the Donor can add targets.",
+    "agreement.finalise":  "Only the Donor can finalise (lock) agreements.",
     "report.submit":       "Only the NGO can submit reports.",
-    "budget.set":          "Only the Donor-Admin can set an agreement's budget.",
+    "budget.set":          "Only the Donor can set an agreement's budget.",
     "spend.request":       "Only the NGO can raise a spend request.",
     "record.endorse":      "This role cannot endorse records.",
     "record.decline":      "This role cannot decline records.",

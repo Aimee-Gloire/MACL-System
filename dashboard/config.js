@@ -22,7 +22,7 @@ window.MACL_CONFIG = (function () {
   // and maps the role to its server-side signing key. These entries are used for
   // display + labelling on-chain addresses, and for the login dropdown.
   ROLES: {
-    donor: { label: "Donor-Admin", short: "Donor", address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" },
+    donor: { label: "Donor",       short: "Donor", address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" },
     ngo:   { label: "NGO",         short: "NGO",   address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" },
     audit: { label: "Audit",       short: "Govt",  address: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC" },
   },
@@ -36,8 +36,8 @@ window.MACL_CONFIG = (function () {
   // level (not the page level): every role can SEE every page, only the allowed
   // role can OPERATE a given write control. Keep this in sync with the contracts.
   //
-  //   agreement.create / addTarget / finalise  -> Donor-Admin only
-  //   budget.set                               -> Donor-Admin only
+  //   agreement.create / addTarget / finalise  -> Donor only
+  //   budget.set                               -> Donor only
   //   report.submit                            -> NGO only
   //   spend.request                            -> NGO only (raises a spend request)
   //   record.endorse / record.decline          -> all three (the 2-of-3)

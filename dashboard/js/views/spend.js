@@ -1,8 +1,9 @@
 /*
  * Budget & Spend page — Part 1's contract logic, in the browser.
- *  - Donor-Admin sets a budget on a DRAFT agreement (locks at finalisation).
+ *  - Donor sets a budget on a DRAFT agreement (locks at finalisation).
  *  - NGO raises a spend request (amount, purpose, supporting-document fingerprint).
- *    The document is hashed IN THE BROWSER (SHA-256) — only the hash is sent on-chain.
+ *    The document is uploaded to the server, which returns its SHA-256 — only that hash
+ *    is recorded on-chain (the file itself never goes on the blockchain).
  *  - The two NON-submitter roles endorse/decline; a request is APPROVED at 2-of-3 and
  *    the remaining budget drops. The submitter cannot approve its own request.
  *  - After approval the requester can MARK IT SPENT (BL-7): the actual receipt is
@@ -18,7 +19,15 @@
 MACL_UI.ready(async () => {
   const cfg = MACL.cfg;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set("sp-acting", MACL.roleMeta().label + " Console");
+  // Role scoping: show each write card only to the org that operates it. Other roles still
+  // see both tables below and can endorse/decline spend; only the forms are hidden. When only
+  // one form remains visible, it expands to fill the row.
+  const canBudget = MACL.can("budget.set"), canSpend = MACL.can("spend.request");
+  const bdSection = document.getElementById("bd-section"), spSection = document.getElementById("sp-section");
+  if (!canBudget && bdSection) bdSection.style.display = "none";
+  if (!canSpend && spSection) spSection.style.display = "none";
+  if (canBudget && !canSpend && bdSection) bdSection.classList.replace("lg:col-span-5", "lg:col-span-12");
+  if (canSpend && !canBudget && spSection) spSection.classList.replace("lg:col-span-7", "lg:col-span-12");
 
   let agreements = [];     // all agreements (with budget/committed/remaining)
   let requests = [];       // all spend requests (+ endorsement state)
@@ -31,15 +40,41 @@ MACL_UI.ready(async () => {
     populateSpendSelect();
     renderBudgets();
     await renderRequests();
+    renderPortfolio();
+  }
+
+  // Portfolio totals across ALL agreements (read-only; visible to every role). Budgeted /
+  // committed (approved & locked against budget) / remaining / spent (settled with a receipt).
+  function renderPortfolio() {
+    const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0n);
+    set("pf-budget", MACL.fmtMoney(sum(agreements, (r) => r.budget || 0n)));
+    set("pf-committed", MACL.fmtMoney(sum(agreements, (r) => r.committed || 0n)));
+    set("pf-remaining", MACL.fmtMoney(sum(agreements, (r) => r.remaining || 0n)));
+    set("pf-spent", MACL.fmtMoney(sum(requests, (r) => (r.req.spent ? BigInt(r.req.amount) : 0n))));
   }
 
   // ---------------------------------------------------------------- selects
+  // A recognisable label for an agreement, built from existing data (the contract has no
+  // programme-name field): lead with the first target's indicator (what the programme measures),
+  // note any extra targets, and the period in years — so the Donor/NGO can tell agreements apart.
+  function agreementLabel(r) {
+    const ts = r.targets || [];
+    let what = "(no targets yet)";
+    if (ts.length) {
+      const ind = ts[0].indicator || "target";
+      const short = ind.length > 24 ? ind.slice(0, 23) + "…" : ind;
+      what = ts.length > 1 ? `${short} (+${ts.length - 1} more)` : short;
+    }
+    const yr = (d) => new Date(Number(d) * 1000).getFullYear();
+    return `#${r.id} · ${what} · ${yr(r.a.startDate)}→${yr(r.a.endDate)}`;
+  }
+
   function populateBudgetSelect() {
     const sel = document.getElementById("bd-agreement");
     const drafts = agreements.filter((r) => !r.finalised);
     sel.innerHTML = drafts.length
       ? `<option disabled selected value="">Choose a draft agreement…</option>` +
-        drafts.map((r) => `<option value="${r.id}">Agreement #${r.id} — current budget ${MACL.fmtMoney(r.budget)}</option>`).join("")
+        drafts.map((r) => `<option value="${r.id}">${MACL.esc(agreementLabel(r))} · budget ${MACL.fmtMoney(r.budget)}</option>`).join("")
       : `<option disabled selected value="">No draft agreements (budgets lock at finalisation)</option>`;
   }
 
@@ -48,7 +83,7 @@ MACL_UI.ready(async () => {
     const fundable = agreements.filter((r) => r.finalised && r.budget > 0n);
     sel.innerHTML = fundable.length
       ? `<option disabled selected value="">Choose a finalised, budgeted agreement…</option>` +
-        fundable.map((r) => `<option value="${r.id}">Agreement #${r.id} — ${MACL.fmtMoney(r.remaining)} remaining</option>`).join("")
+        fundable.map((r) => `<option value="${r.id}">${MACL.esc(agreementLabel(r))} · ${MACL.fmtMoney(r.remaining)} remaining</option>`).join("")
       : `<option disabled selected value="">No finalised agreement has a budget yet</option>`;
     sel.onchange = onPickFundable;
     onPickFundable();
@@ -267,7 +302,7 @@ MACL_UI.ready(async () => {
       } else if (s === "APPROVED" && isSubmitter) {
         settlementBlock = `<div class="mt-8 no-print">
 <h4 class="text-label-caps text-on-surface-variant border-b border-outline-variant pb-2">SETTLEMENT — RECORD THE RECEIPT</h4>
-<p class="text-xs text-on-surface-variant mt-2">Approved 2-of-3. After the funds move through normal banking, pin the ACTUAL receipt's fingerprint to close this out. The file is hashed in your browser — only the hash goes on-chain.</p>
+<p class="text-xs text-on-surface-variant mt-2">Approved 2-of-3. After the funds move through normal banking, pin the ACTUAL receipt's fingerprint to close this out. The receipt is uploaded to the server and only its SHA-256 is recorded on-chain — never the file itself.</p>
 <div class="mt-3 flex flex-wrap items-center gap-2">
 <input type="file" data-receipt="${id}" class="text-xs file:mr-2 file:rounded file:border-0 file:bg-primary-container file:text-white file:px-2 file:py-1 file:text-[11px]"/>
 <button data-mark-spent="${id}" class="bg-primary text-white px-3 py-1.5 rounded text-xs font-semibold hover:opacity-90 active:scale-95 transition-all">Mark as spent</button>
@@ -285,6 +320,8 @@ MACL_UI.ready(async () => {
 <p class="text-sm text-on-surface">Requested by <span class="font-bold text-primary">${MACL.esc(MACL.labelForAddress(r.req.requester))}</span></p>
 <p class="text-sm text-on-surface">Amount <span class="font-bold">${MACL.fmtMoney(r.req.amount)}</span></p>
 <p class="text-xs text-on-surface-variant">${note}</p>
+${(r.endorsers && r.endorsers.length) ? r.endorsers.map((m) => `<p class="text-xs text-on-surface"><span class="font-semibold text-primary">${MACL.esc(m.label)}</span> endorsed</p>`).join("") : ""}
+${(r.decliners && r.decliners.length) ? r.decliners.map((m) => `<p class="text-xs text-error"><span class="font-semibold">${MACL.esc(m.label)}</span> declined</p>`).join("") : ""}
 </div>
 <div class="space-y-3">
 <h4 class="text-label-caps text-on-surface-variant border-b border-outline-variant pb-2">EVIDENCE INTEGRITY</h4>
@@ -311,6 +348,18 @@ ${settlementBlock}
 
     // wire the one-click View/Verify controls for supporting docs + receipts (BL-14)
     MACL_UI.wireVerify(body);
+
+    // Export the spend ledger (audit traceability, proposal RQ3) — available to every role.
+    const exp = document.getElementById("sp-export");
+    if (exp) exp.onclick = () => MACL_UI.exportCSV(
+      "macl-spend.csv",
+      ["requestId", "agreementId", "purpose", "amount", "status", "endorsements", "declines", "documentHash", "receiptHash", "spent", "spentAt"],
+      requests.map((r) => [
+        r.req.id, r.req.agreementId, r.req.purpose, r.req.amount, statusOf(r),
+        `${r.count}/${threshold}`, r.declines, r.req.documentHash, r.req.receiptHash,
+        r.req.spent, r.req.spent ? MACL.fmtTs(r.req.spentAt) : "",
+      ])
+    );
   }
 
   // Hash the chosen receipt file in the browser, then pin its SHA-256 on-chain.
