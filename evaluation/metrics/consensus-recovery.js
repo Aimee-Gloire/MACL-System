@@ -21,7 +21,7 @@ async function run({ macl }) {
   const TIMEOUT_S = Number(process.env.EVAL_RECOVERY_TIMEOUT || 120);
 
   const nodes = macl.nodeProviders();
-  if (nodes.length < 3) throw new Error("need 3 node endpoints in dashboard/config.js NODES");
+  if (nodes.length < 3) throw new Error("need 3 node endpoints (set NODE_RPC_URLS in evaluation/.env)");
   if (NODE < 1 || NODE > nodes.length) throw new Error(`EVAL_RECOVERY_NODE out of range: ${NODE}`);
 
   const target = nodes[NODE - 1];

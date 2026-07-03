@@ -30,7 +30,7 @@ async function main() {
     throw new Error(
       "Donor org is not registered on-chain — createAgreement would revert.\n" +
       "  Run `cd contracts && npm run deploy:besu` (it seeds the org registry),\n" +
-      "  then update dashboard/config.js ADDRESSES if the deploy printed new ones."
+      "  then set the *_ADDRESS values in evaluation/.env if the deploy printed new ones."
     );
   }
 
