@@ -10,8 +10,24 @@
  * a single global object: window.MACL_CONFIG.
  */
 window.MACL_CONFIG = (function () {
-  // Base URL of the REST API. Same host, port 3001 by default (see api/.env).
-  const API_BASE = "http://127.0.0.1:3001/api";
+  // Base URL of the REST API. Picked automatically so the SAME files work both
+  // locally and when hosted — no hand-editing between the two:
+  //   1. An explicit override always wins: add `?api=https://host/api` to the URL,
+  //      or set `window.MACL_API_BASE` before this script loads.
+  //   2. On localhost / 127.0.0.1 (local development) → the local API on port 3001.
+  //   3. Anywhere else (hosted) → the same site the dashboard is served from, at
+  //      `/api`. On the server, a reverse proxy (e.g. Caddy) serves the dashboard
+  //      and forwards `/api` to the Node API — so the browser only ever needs one
+  //      address, and there are no cross-origin/mixed-content issues.
+  const API_BASE = (function () {
+    const override =
+      new URLSearchParams(location.search).get("api") || window.MACL_API_BASE;
+    if (override) return String(override).replace(/\/+$/, "");
+    const host = location.hostname;
+    const isLocal = host === "localhost" || host === "127.0.0.1" || host === "";
+    if (isLocal) return "http://127.0.0.1:3001/api";
+    return location.origin + "/api";
+  })();
 
   return {
   // The one endpoint the whole dashboard talks to.
