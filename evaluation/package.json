@@ -1,0 +1,16 @@
+{
+  "name": "macl-evaluation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RQ3 control-group evaluation: a centralised PostgreSQL baseline vs MACL (3-node Besu). Kept entirely separate from MACL — this is the control group, it never changes the contracts.",
+  "type": "commonjs",
+  "scripts": {
+    "seed": "node seed.js",
+    "evaluate": "node run-evaluation.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.0",
+    "pg": "^8.12.0"
+  }
+}
