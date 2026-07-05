@@ -2,6 +2,15 @@
 
 MACL is a permissioned-blockchain system that lets an NGO, a government M&E unit, and a donor share **one** tamper-resistant record of a development programme. Agreements and their targets live on-chain, reported results are evaluated automatically, programme spend is requested and approved against a budget, and a result is final only after a 2-of-3 multi-party sign-off — so no single party controls the record. (BSc Software Engineering capstone — final system.)
 
+## Quick links
+
+- **Demo video (5 min):** _add link here_
+- **Live demo:** _add hosted URL here (or run locally — see "Run MACL" below)_
+- **Run it locally:** [`RUN-BESU.md`](RUN-BESU.md) — full step-by-step
+- **Deploy it to a server:** [`DEPLOYMENT.md`](DEPLOYMENT.md) — free-tier cloud hosting, step-by-step
+- **Results, analysis & discussion:** [`RESULTS.md`](RESULTS.md) — RQ3 evaluation vs a centralised baseline
+- **Testing evidence:** [`testing-evidence/`](testing-evidence/) — screenshots of the system under different tests and data
+
 ## Problem
 
 In multi-stakeholder NGO programmes the master record usually sits in one organisation's database. That party can alter history before an audit, compliance is judged manually and inconsistently, and verification depends on infrequent audits of records the audited party itself controls. No other party can independently trust the records between audits.
@@ -113,6 +122,18 @@ The repo is built so that **no real secret is ever committed**. Practical rules:
 - **Auth is hardened.** `JWT_SECRET` is required and fail-closed (≥ 32 chars or the API won't start); login passwords are bcrypt hashes (`*_PW_HASH`), never plaintext.
 - **Database TLS is verified (F-12).** A remote Postgres is always connected with the certificate verified; pin the provider's CA with `PG_CA_CERT` for the strongest setting.
 - **Secret-leak guard.** Run `cd api && npm run check:secrets` to scan the tracked working tree **and** git history for real secret patterns (Neon `npg_` passwords, non-test private keys, real `JWT_SECRET` values). It prints only the file/commit and pattern, never the secret, and exits non-zero if anything is found. The public test keys are allow-listed, so a clean repo passes.
+
+## Testing and evaluation
+
+MACL is exercised under several complementary testing strategies:
+
+- **Automated unit tests.** Smart-contract tests run with Hardhat (`cd contracts && npm test`); API routing, validation and auth tests run with the Node test runner (`cd api && npm test`).
+- **Functional tests with different data values.** Reports submitted through the dashboard are evaluated on-chain to **PASS / FAIL / FLAG**, and records that miss the verification window become **UNVERIFIED** — each outcome driven purely by the reported value and timing.
+- **Edge-case / negative tests.** Over-budget spend is refused, an organisation cannot approve its own spend request, actions are blocked for roles that may not perform them, and any party can dispute (decline) a record.
+- **Tamper-resistance and consensus recovery.** Taking a validator offline is flagged across nodes, the 2-of-3 majority keeps the canonical chain, and the node resyncs on rejoin (`blockchain/tamper-demo.sh`).
+- **Comparative performance (RQ3).** The `evaluation/` harness measures tamper-detection latency, audit-trail completeness and consensus-recovery time against a centralised PostgreSQL baseline.
+
+Screenshots of these are in [`testing-evidence/`](testing-evidence/), and the full results, analysis and discussion are in [`RESULTS.md`](RESULTS.md).
 
 ## Conclusion
 
