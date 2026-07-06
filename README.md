@@ -4,8 +4,6 @@ MACL is a permissioned-blockchain system that lets an NGO, a government M&E unit
 
 ## Quick links
 
-- **Demo video (5 min):** _add link here_
-- **Live demo:** _add hosted URL here (or run locally — see "Run MACL" below)_
 - **Run it locally:** [`RUN-BESU.md`](RUN-BESU.md) — full step-by-step
 - **Deploy it to a server:** [`DEPLOYMENT.md`](DEPLOYMENT.md) — free-tier cloud hosting, step-by-step
 - **Results, analysis & discussion:** [`RESULTS.md`](RESULTS.md) — RQ3 evaluation vs a centralised baseline

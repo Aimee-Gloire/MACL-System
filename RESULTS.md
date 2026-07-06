@@ -128,8 +128,3 @@ reference implementation in NGO accountability.
 - Commission a **formal security audit** of the smart contracts before any production use.
 - Run a **controlled pilot with real (anonymised) programme data** and multiple organisations to test
   the findings beyond the synthetic, single-machine setup used here.
-
----
-
-*Note: the analysis, discussion, and recommendations above are to be reviewed and refined together
-with the project supervisor, as required by the assignment.*

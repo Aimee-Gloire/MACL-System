@@ -1,23 +1,52 @@
-# DEPLOYMENT.md — hosting MACL on a free cloud server
+# DEPLOYMENT.md — deploying MACL
 
-This is the full, plain-language guide to putting MACL online on a **free Oracle Cloud
-"Always Free" virtual machine (VM)**, reachable at your own web address over HTTPS. The whole
-system (the 3-node Besu chain, the API, and the dashboard) runs on one small server.
+MACL is deployed in two stages:
 
-**What you need before starting:** a credit/debit card (for identity verification only — you are
-not charged on Always Free), and about 1–2 hours the first time.
+- **Option A — a live public link now, via a Cloudflare tunnel** (no cloud account, no card). This is what the live demo currently uses: it exposes the system running on the local machine at a public `https://` address. Fast to set up; the link is live while the machine and tunnel are running.
+- **Option B — a persistent server on a free Oracle Cloud "Always Free" VM** (the end goal). Always-on, its own fixed web address, survives restarts. Takes longer to set up and needs a card for identity verification (no charge on Always Free).
 
-**How the hosted setup fits together:** one VM runs everything. A small web server called **Caddy**
-sits in front. It serves the dashboard files and forwards anything under `/api` to the Node API, all
-under one web address over HTTPS. Because the dashboard and the API share the same address, the
-dashboard's automatic API selection (added in `dashboard/config.js`) "just works" with no editing.
-
-```
-Browser ──HTTPS──▶  Caddy (port 443)  ┬─ "/"      → dashboard files
-                                       └─ "/api/*" → Node API (127.0.0.1:3001) → 3 Besu nodes
-```
+Both use the same idea: a small web server, **Caddy**, serves the dashboard and forwards anything under `/api` to the Node API, so the dashboard and API share one address and the dashboard's automatic API selection (in `dashboard/config.js`) "just works."
 
 ---
+
+## Option A — live public link via a Cloudflare tunnel (current setup)
+
+This is the deployment currently in use. It puts the locally-running system on a public HTTPS URL with no cloud account and no card.
+
+**One-time install** (Homebrew): `brew install caddy cloudflared`
+
+**1. Have the stack running** — the 3 Besu nodes (`docker compose up` in `blockchain/`) and the API (`npm start` in `api/`, port 3001).
+
+**2. Start Caddy** — a local reverse proxy that serves the dashboard and forwards `/api` to the API on one port (8082). Config (`local-proxy.Caddyfile`):
+
+```
+:8082 {
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle {
+		root * /absolute/path/to/dashboard
+		file_server
+	}
+}
+```
+
+Run it and leave it running: `caddy run --config /path/to/local-proxy.Caddyfile`
+
+**3. Open the public tunnel** and leave it running: `cloudflared tunnel --url http://localhost:8082`
+
+It prints a public `https://<random>.trycloudflare.com` URL — that URL **is** the live demo. The browser reaches it through Cloudflare's global edge (genuinely public), and because the dashboard and API share that one origin, login and every action work.
+
+**Notes:** the tunnel URL changes each time `cloudflared` restarts, and the link is only live while the stack + Caddy + tunnel are running — ideal for a defence demo. For an always-on link, use Option B.
+
+---
+
+## Option B — persistent server on Oracle Cloud "Always Free" (end goal)
+
+Always-on hosting on one free Oracle VM: the whole system (3-node Besu chain, API, dashboard) runs on the server, with Caddy in front for HTTPS at your own domain.
+
+**What you need before starting:** a card enabled for international online payments (identity verification only — no charge on Always Free), and about 1–2 hours the first time.
+
 
 ## Part 0 — Create a free Oracle Cloud account
 
