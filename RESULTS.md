@@ -108,6 +108,7 @@ reference implementation in NGO accountability.
 ## 4. Recommendations
 
 **For the community (applying the product).**
+
 - Deploy **one node, one API, and one signing key per participating organisation**, so that trust is
   distributed at every tier, not just at the ledger. Each organisation should hold its own key.
 - Store production keys in a **secrets manager or hardware security module**, and generate fresh
@@ -121,6 +122,7 @@ reference implementation in NGO accountability.
   058/2021 on the Protection of Personal Data and Privacy.
 
 **Future work.**
+
 - Implement the **DHIS2 read-only import** that was scoped as a stretch goal, so reported values can
   flow from existing health-sector systems.
 - Add **mobile-friendly reporting** for frontline staff, and richer identity/permissioning for

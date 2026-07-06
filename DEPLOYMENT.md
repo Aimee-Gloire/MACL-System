@@ -1,318 +1,264 @@
 # DEPLOYMENT.md — deploying MACL
 
-MACL is deployed in two stages:
+MACL is **deployed to a persistent cloud server** on Oracle Cloud's "Always Free" tier — the whole
+system (3-node Besu chain, REST API, and dashboard) runs on one small VM, reachable at a fixed public
+address. That live deployment, and how it was built, is **Section 1** below.
 
-- **Option A — a live public link now, via a Cloudflare tunnel** (no cloud account, no card). This is what the live demo currently uses: it exposes the system running on the local machine at a public `https://` address. Fast to set up; the link is live while the machine and tunnel are running.
-- **Option B — a persistent server on a free Oracle Cloud "Always Free" VM** (the end goal). Always-on, its own fixed web address, survives restarts. Takes longer to set up and needs a card for identity verification (no charge on Always Free).
+A lightweight **Cloudflare tunnel** option — which exposes the system running on a local machine at a
+temporary public address, with no cloud account needed — is documented in **Section 2** as an
+alternative.
 
-Both use the same idea: a small web server, **Caddy**, serves the dashboard and forwards anything under `/api` to the Node API, so the dashboard and API share one address and the dashboard's automatic API selection (in `dashboard/config.js`) "just works."
+**How the hosted setup fits together:** one VM runs everything. A small web server, **Caddy**, sits
+in front on port 80: it serves the dashboard files and forwards anything under `/api` to the Node
+API. Because the dashboard and API share one address, the dashboard's automatic API selection (in
+`dashboard/config.js`) "just works" with no editing.
+
+```
+Browser ──HTTP──▶  Caddy (port 80)  ┬─ "/"      → dashboard files
+                                     └─ "/api/*" → Node API (127.0.0.1:3001) → 3 Besu nodes
+```
+
+> The live demo is served over HTTP at the VM's IP address. Because the system uses only synthetic
+> data (no personal data or real funds), HTTPS is not required for the demo; adding a domain + HTTPS
+> is documented as an optional upgrade at the end of Section 1.
 
 ---
 
-## Option A — live public link via a Cloudflare tunnel (current setup)
+# Section 1 — Live deployment on Oracle Cloud "Always Free"
 
-This is the deployment currently in use. It puts the locally-running system on a public HTTPS URL with no cloud account and no card.
-
-**One-time install** (Homebrew): `brew install caddy cloudflared`
-
-**1. Have the stack running** — the 3 Besu nodes (`docker compose up` in `blockchain/`) and the API (`npm start` in `api/`, port 3001).
-
-**2. Start Caddy** — a local reverse proxy that serves the dashboard and forwards `/api` to the API on one port (8082). Config (`local-proxy.Caddyfile`):
-
-```
-:8082 {
-	handle /api/* {
-		reverse_proxy 127.0.0.1:3001
-	}
-	handle {
-		root * /absolute/path/to/dashboard
-		file_server
-	}
-}
-```
-
-Run it and leave it running: `caddy run --config /path/to/local-proxy.Caddyfile`
-
-**3. Open the public tunnel** and leave it running: `cloudflared tunnel --url http://localhost:8082`
-
-It prints a public `https://<random>.trycloudflare.com` URL — that URL **is** the live demo. The browser reaches it through Cloudflare's global edge (genuinely public), and because the dashboard and API share that one origin, login and every action work.
-
-**Notes:** the tunnel URL changes each time `cloudflared` restarts, and the link is only live while the stack + Caddy + tunnel are running — ideal for a defence demo. For an always-on link, use Option B.
-
----
-
-## Option B — persistent server on Oracle Cloud "Always Free" (end goal)
-
-Always-on hosting on one free Oracle VM: the whole system (3-node Besu chain, API, dashboard) runs on the server, with Caddy in front for HTTPS at your own domain.
-
-**What you need before starting:** a card enabled for international online payments (identity verification only — no charge on Always Free), and about 1–2 hours the first time.
-
+**What you need:** a card enabled for international online payments (identity verification only — no
+charge on Always Free), and about 1–2 hours the first time.
 
 ## Part 0 — Create a free Oracle Cloud account
 
-1. Go to **https://www.oracle.com/cloud/free/** and click **Start for free**.
-2. Enter your email and country (**Rwanda**), and verify the email.
-3. Fill in your name and account details.
-4. **Choose your Home Region carefully — it is permanent and your free resources live only there.**
-   Pick one geographically close to Rwanda for speed. **Johannesburg** (`af-johannesburg-1`) is the
-   closest. If you later find the free ARM machines are always "out of capacity" there, a European
-   region (Frankfurt or Amsterdam) is a common fallback — but you'd have to make a new account to
-   change region, so choose once and stick with it.
-5. Verify with your card (a small temporary hold may appear, then disappears; Always Free = no
-   charge). Finish and wait a few minutes while Oracle sets up your account.
-6. You'll land in the **Oracle Cloud Console** (cloud.oracle.com). That's home base for everything
-   below.
+1. Go to **<https://www.oracle.com/cloud/free/>** → **Start for free**.
+2. Enter your email, verify it, and set your details with **Rwanda** as the country.
+3. **Home Region (permanent):** choose one close to Rwanda — **South Africa Central (Johannesburg)**.
+4. Verify with a card (a temporary $0 authorization; no charge on Always Free), and finish. Wait a
+   few minutes for the account to provision, then sign in to the **Oracle Cloud Console**.
 
-> **Capacity tip:** the free ARM machines are popular and sometimes show "Out of host capacity."
-> Two fixes: (a) just retry the create button over a few hours, or (b) switch your account to
-> **Pay As You Go** (Console → your profile → "Upgrade") — this greatly improves capacity and you
-> **still pay nothing** as long as you stay within the Always Free limits.
+> **Free-tier note:** the account includes a 30-day trial *and* the permanently-free "Always Free"
+> resources. As long as you build only on **Always-Free-eligible** resources and never click
+> "Upgrade to Pay As You Go", the card is never charged and the deployment keeps running after the
+> trial ends.
 
----
+> **Capacity note:** the free Arm shape is in high demand and often returns "Out of host capacity."
+> Retry the create button at a calm pace (roughly once a minute — rapid clicking triggers a rate
+> limit), and it eventually goes through.
 
 ## Part 1 — Create the VM
 
-1. In the Console, open the menu (☰) → **Compute → Instances → Create instance**.
-2. **Name:** `macl-server` (anything is fine).
-3. **Image and shape → Edit:**
-   - **Image:** Canonical **Ubuntu 22.04** (Always Free eligible).
-   - **Shape:** click **Change shape → Ampere → VM.Standard.A1.Flex**, then set **OCPUs = 2** and
-     **Memory = 12 GB** (the current Always Free maximum). This is plenty for MACL.
-4. **SSH keys:** you need a key pair to log in. On your Mac, open a terminal and run:
+1. **☰ menu → Compute → Instances → Create instance.**
+2. **Name:** `macl-server`.
+3. **Image and shape:**
+   - **Image:** Canonical **Ubuntu 22.04**.
+   - **Shape:** **Ampere → VM.Standard.A1.Flex** (the **Always Free-eligible** Arm shape). 1 OCPU /
+     6 GB is fine (we add swap later to give the three Besu nodes headroom).
+4. **Security section:** leave **both** toggles OFF (no Shielded instance, no Confidential computing).
+5. **Networking:** create a new VCN + **public subnet**, and enable **Assign a public IPv4 address**
+   if the toggle is available. (If the toggle is greyed out — a known wizard quirk — skip it and
+   assign the IP in Part 2.)
+6. **Add SSH keys:** first make a key on your Mac —
+
    ```
    ssh-keygen -t ed25519 -C "macl" -f ~/.ssh/macl_key
    ```
-   Press Enter through the prompts (a passphrase is optional). This makes two files:
-   `~/.ssh/macl_key` (private — keep secret) and `~/.ssh/macl_key.pub` (public). Back in the Console,
-   choose **Paste public keys**, and paste the contents of the **.pub** file. Get it with:
-   ```
-   cat ~/.ssh/macl_key.pub
-   ```
-5. **Networking:** leave the default — it creates a virtual network with a **public IPv4 address**
-   (make sure "Assign a public IPv4 address" is ticked).
-6. Click **Create**. After a minute or two the instance shows **Running** with a **Public IP
-   address** — note that number down; you'll use it a lot.
 
----
+   Press Enter through the prompts, then `cat ~/.ssh/macl_key.pub` and paste that line into
+   **"Paste public keys."**
+7. **Storage:** leave the boot volume default (~46.6 GB, free). **Create**, and wait for **Running**.
 
-## Part 2 — Open the firewall for web traffic (important, easy to miss)
+## Part 2 — Assign a public IP (if it's blank)
 
-By default only SSH (port 22) is open. You must open **80** and **443** (web/HTTPS) in **two**
-places.
+If the instance's **Public IPv4 address** shows "—":
 
-**A. Oracle's network security list:**
-1. Console → Compute → Instances → click `macl-server` → click its **Virtual Cloud Network** link.
-2. Click **Security Lists** → the **Default Security List**.
-3. **Add Ingress Rules** (two of them):
-   - Source `0.0.0.0/0`, IP Protocol **TCP**, Destination port **80**.
-   - Source `0.0.0.0/0`, IP Protocol **TCP**, Destination port **443**.
+1. Instance → **Networking** tab → click the **VNIC** → **IP administration**.
+2. On the private-IP row, **⋮ → Edit** → set **Public IP → Ephemeral public IP** → **Update**.
+3. Copy the assigned public IP (the live server used **145.241.184.66**).
 
-**B. Ubuntu's own firewall (the part people forget).** Oracle's Ubuntu image has internal firewall
-rules that also block 80/443. After you SSH in (Part 3), run:
+## Part 3 — Open the firewall for web traffic
+
+**A. Oracle security list:** instance → Networking → the **subnet** → **Security Lists** → **Default
+Security List** → **Add Ingress Rules** → Source `0.0.0.0/0`, IP Protocol **TCP**, Destination port
+**80**. (Add **443** too if you plan to enable HTTPS later.)
+
+**B. Ubuntu's own firewall** (do this after you SSH in, Part 4):
+
 ```
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+sudo iptables -I INPUT 1 -p tcp --dport 80 -j ACCEPT
 sudo netfilter-persistent save
 ```
 
----
+## Part 4 — Connect over SSH
 
-## Part 3 — Connect to the VM
-
-From your Mac terminal (use the public IP from Part 1):
 ```
 ssh -i ~/.ssh/macl_key ubuntu@YOUR_PUBLIC_IP
 ```
-Type `yes` the first time. You're now on the server (the prompt changes to `ubuntu@macl-server`).
-Everything from here runs **on the server**, not your Mac.
 
-First, update the machine:
-```
-sudo apt update && sudo apt upgrade -y
-```
+Type `yes` the first time. The prompt changes to `ubuntu@macl-server`. Everything below runs **on the
+server**.
 
----
-
-## Part 4 — Install Docker and Node.js
-
-Still on the server:
+## Part 5 — Install Docker, Node, git, and add swap
 
 ```
-# Docker + the compose plugin
-sudo apt install -y docker.io docker-compose-v2 git
-sudo usermod -aG docker ubuntu           # lets you run docker without sudo
-newgrp docker                            # apply the group now (or log out/in)
-
-# Node.js 20
+sudo apt update && sudo apt install -y docker.io docker-compose-v2 git build-essential
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
-
-# check
+# 4 GB swap so three Besu (JVM) nodes fit comfortably in 6 GB RAM
+sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
 docker --version && node --version
 ```
 
-> Your VM is an **Arm** machine. The Besu image and Node are Arm-compatible, so this all works. If
-> any `docker compose up` step ever complains about architecture, tell me and we'll pin an Arm tag.
-
----
-
-## Part 5 — Get the MACL code onto the server
-
-The cleanest way is to push your repo to GitHub (you'll do this for Attempt 1 anyway) and clone it:
-```
-git clone https://github.com/YOUR_USERNAME/MACL-system.git
-cd MACL-system
-```
-
-The `.env` files are **not** in the repo (they hold secrets), so create them on the server:
+## Part 6 — Get the code
 
 ```
-# API secrets
-cd api
+cd ~
+git clone https://github.com/Aimee-Gloire/MACL-System.git macl
+cd macl
+```
+
+## Part 7 — Start the chain and deploy the contracts
+
+```
+cd ~/macl/blockchain
+sudo bash setup-network.sh
+sudo docker compose up -d
+sleep 25 && sudo docker compose ps          # three nodes should show "Up"
+
+cd ~/macl/contracts
 cp .env.example .env
-# then edit .env (use: nano .env) and set:
-#   JWT_SECRET      -> run `openssl rand -hex 32` and paste the result
-#   DONOR_PW_HASH / NGO_PW_HASH / AUDIT_PW_HASH / ADMIN_PW_HASH
-#                   -> for each, run: node scripts/hash-password.js 'yourpassword'
-#   DATABASE_URL    -> your Neon connection string (or leave blank to run without file storage)
-#   CORS_ORIGIN     -> https://YOUR_DOMAIN   (from Part 7; you can set this later)
 npm install
-cd ..
-
-# Contracts deployer key
-cd contracts
-cp .env.example .env         # the test deployer key is already in the example
-npm install
-cd ..
-
-# Evaluation (optional on the server — only if you want to re-run RQ3 here)
+npm run deploy:besu                          # deploys the 3 contracts + registers the orgs
 ```
 
----
+On a fresh chain the printed contract addresses match the defaults already in `api/.env.example`, so
+no address editing is needed.
 
-## Part 6 — Start the chain, deploy the contracts, start the API
-
-Still in the repo root on the server:
+## Part 8 — Configure and start the API (pm2)
 
 ```
-# 1) Start the 3 Besu validators (detached, keeps running)
-cd blockchain
-./setup-network.sh          # generates a fresh chain + keys for THIS server
-docker compose up -d
-./check-network.sh          # confirm all 3 validators + rising block height
-cd ..
-
-# 2) Deploy + wire the contracts onto this fresh chain
-cd contracts
-npm run deploy:besu
-#   The printed addresses will be the standard fresh-chain ones already in api/.env.example,
-#   so you normally don't need to change anything. If they differ, paste them into api/.env.
-cd ..
-
-# 3) Run the API as a background service with pm2 (so it survives logout/reboot)
+cd ~/macl/api
+cp .env.example .env
+npm install
+# set a JWT secret, bcrypt-hash the login passwords, and pin CORS to the server
+cat > setup-env.js <<'EOF'
+const fs=require('fs'),crypto=require('crypto'),bcrypt=require('bcrypt');
+let env=fs.readFileSync('.env','utf8');
+const set=(k,v)=>{const re=new RegExp('^'+k+'=.*$','m');env=re.test(env)?env.replace(re,k+'='+v):env+'\n'+k+'='+v;};
+set('JWT_SECRET',crypto.randomBytes(32).toString('hex'));
+const pw='macl1234';
+for(const r of ['DONOR','NGO','AUDIT','ADMIN'])set(r+'_PW_HASH',bcrypt.hashSync(pw,10));
+set('CORS_ORIGIN','http://YOUR_PUBLIC_IP');
+fs.writeFileSync('.env',env);
+console.log('ENV OK. Login password for all roles = '+pw);
+EOF
+node setup-env.js
 sudo npm install -g pm2
-cd api
-npm run migrate             # only if you set DATABASE_URL (creates the documents table)
 pm2 start server.js --name macl-api
 pm2 save
-pm2 startup                 # run the line it prints, so the API restarts on reboot
-cd ..
+curl -s http://127.0.0.1:3001/api/health; echo    # expect {"ok":true, ...}
 ```
 
-Quick local check on the server:
-```
-curl -s http://127.0.0.1:3001/api/health
-```
-You should see JSON with `"ok":true` and a block number.
+> `DATABASE_URL` is left unset, so the optional document store is disabled (upload/verify endpoints
+> return 503) and every other flow works. To enable file evidence, set `DATABASE_URL` to a Neon/
+> Postgres connection string and run `npm run migrate`.
 
----
-
-## Part 7 — Point a web address at it and turn on HTTPS (Caddy)
-
-You need a **domain name** pointing at your VM's public IP. Two options:
-- **Free:** create a free subdomain at **https://www.duckdns.org** (sign in, pick a name like
-  `macl-yourname`, and set its IP to your VM's public IP). You'll get `macl-yourname.duckdns.org`.
-- **Paid (~22,000 RWF, in your proposal budget):** buy a domain and set an **A record** to your VM's
-  public IP.
-
-Then install **Caddy**, which serves the dashboard and proxies the API, and gets a free HTTPS
-certificate automatically:
+## Part 9 — Put Caddy in front (serve dashboard + proxy /api on port 80)
 
 ```
-# install Caddy
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update && sudo apt install -y caddy
+sudo tee /etc/caddy/Caddyfile > /dev/null <<'EOF'
+:80 {
+ handle /api/* {
+  reverse_proxy 127.0.0.1:3001
+ }
+ handle {
+  root * /home/ubuntu/macl/dashboard
+  file_server
+ }
+}
+EOF
+# let the caddy user read into the home folder, then start it
+sudo chmod o+x /home/ubuntu
+sudo systemctl restart caddy
 ```
 
-Create the Caddy config. Run `sudo nano /etc/caddy/Caddyfile` and replace its contents with (use
-your real domain):
+## Part 10 — Verify it's live
+
+Open **http://YOUR_PUBLIC_IP/** in a browser (the live server is **<http://145.241.184.66/>**). You get
+the sign-in page; log in as **donor / ngo / audit**, password **`macl1234`**, and the connection light
+goes green. Try it on a phone over mobile data to confirm it's genuinely public.
+
+**Screenshot the live URL + green connection light** — that's the "deployed and verified in the target
+environment" evidence the rubric asks for.
+
+## Optional upgrade — a domain + HTTPS
+
+Point a domain (or a free **DuckDNS** subdomain) at the VM's IP, open port 443 (Part 3), then replace
+the Caddyfile's `:80` line with your domain name — Caddy fetches a free HTTPS certificate
+automatically:
 
 ```
-YOUR_DOMAIN {
-    handle /api/* {
-        reverse_proxy 127.0.0.1:3001
-    }
-    handle {
-        root * /home/ubuntu/MACL-system/dashboard
-        file_server
-        try_files {path} /index.html
-    }
+your.domain {
+    handle /api/* { reverse_proxy 127.0.0.1:3001 }
+    handle { root * /home/ubuntu/macl/dashboard; file_server }
 }
 ```
 
-Then reload Caddy:
-```
-sudo systemctl reload caddy
-```
+Reload with `sudo systemctl reload caddy`, and set `CORS_ORIGIN=https://your.domain` in `api/.env` +
+`pm2 restart macl-api`.
 
-Caddy automatically fetches a free HTTPS certificate for your domain the first time someone visits.
+## Keeping it running / making changes
 
-Finally, set the API's `CORS_ORIGIN` to your domain and restart it:
-```
-cd ~/MACL-system/api
-nano .env          # set CORS_ORIGIN=https://YOUR_DOMAIN
-pm2 restart macl-api
-```
-
----
-
-## Part 8 — Verify it's live (your "deployment verified" evidence)
-
-From any browser, open **https://YOUR_DOMAIN**. You should get the MACL sign-in page over HTTPS.
-Log in and confirm the connection light goes **green — "connected · block #…"**. Create one record
-end-to-end.
-
-**Screenshot this** — the live URL in the address bar, the green connection light, and a record
-finalising. Those screenshots are your proof of "deployed and verified in the target environment,"
-which the rubric asks for.
+- **Dashboard or API change:** on the VM, `cd ~/macl && git pull`, then `pm2 restart macl-api` (API)
+  or just hard-refresh the browser (dashboard). Seconds; no data lost.
+- **Contract change:** redeploy (`npm run deploy:besu`) — this starts a **fresh, empty** ledger at new
+  addresses, so decide contract logic before relying on live data. Update the `*_ADDRESS` values in
+  `api/.env` and `pm2 restart macl-api`.
+- The chain data lives in `~/macl/blockchain/Node-*/data`. **Never** run `docker compose down -v`
+  (the `-v` wipes it). A plain reboot is fine — Docker and pm2 restart automatically.
 
 ---
 
-## Part 9 — Making changes after it's live (recap)
+# Section 2 — Alternative: a quick public link via a Cloudflare tunnel
 
-- **Dashboard change:** edit the files → `git pull` on the server (or copy the files) → hard-refresh
-  the browser. Seconds. No data affected.
-- **API change:** `git pull` → `pm2 restart macl-api`. Seconds. No data affected.
-- **Contract change:** you must redeploy (`npm run deploy:besu`), which starts a **fresh, empty**
-  ledger at new addresses — so decide contract logic *before* you rely on live data. Update the
-  `*_ADDRESS` values in `api/.env` and `pm2 restart macl-api`.
-- **Keep it running:** the chain data lives in `blockchain/Node-*/data` on the server. Don't run
-  `docker compose down -v` (the `-v` wipes it). A plain reboot is fine — Docker and pm2 restart
-  automatically.
+Use this to expose the system running on a **local machine** at a public HTTPS address with **no
+cloud account and no card**. The link is live only while the machine, Caddy, and the tunnel are all
+running — ideal for a fast demo without a server.
+
+**One-time install** (Homebrew): `brew install caddy cloudflared`
+
+1. **Run the stack locally** — the 3 Besu nodes (`docker compose up` in `blockchain/`) and the API
+   (`npm start` in `api/`, port 3001).
+2. **Start a local Caddy** that serves the dashboard and forwards `/api` on one port (8082):
+
+   ```
+   :8082 {
+       handle /api/* { reverse_proxy 127.0.0.1:3001 }
+       handle { root * /absolute/path/to/dashboard; file_server }
+   }
+   ```
+
+   `caddy run --config /path/to/local-proxy.Caddyfile`
+3. **Open the tunnel:** `cloudflared tunnel --url http://localhost:8082` — it prints a public
+   `https://<random>.trycloudflare.com` URL that reaches the local system through Cloudflare's edge.
+
+The tunnel URL changes each time `cloudflared` restarts.
 
 ---
 
-## Troubleshooting
+# Troubleshooting
 
-- **Site won't load at all:** ports 80/443 not open — recheck Part 2 (both the Oracle security list
-  *and* the Ubuntu iptables rules).
-- **"Out of host capacity" when creating the VM:** retry over a few hours, or switch to Pay As You Go
-  (still free within limits).
-- **Connection light red / "API unreachable":** the API isn't running (`pm2 status`, then
-  `pm2 restart macl-api`) or the Besu containers are down (`docker compose ps` in `blockchain/`).
-- **HTTPS certificate error:** your domain isn't pointing at the VM's IP yet, or ports 80/443 are
-  closed — Caddy needs port 80 reachable to get the certificate.
+- **Site won't load externally:** ports not open — recheck both the Oracle **security list** ingress
+  rule (port 80) *and* the Ubuntu `iptables` rule (Part 3).
+- **Dashboard returns 403 (locally 200):** the `caddy` user can't read into the home folder — run
+  `sudo chmod o+x /home/ubuntu` and `sudo systemctl restart caddy`.
+- **API won't start / "JWT_SECRET missing":** the env wasn't written — re-run `node setup-env.js`
+  from **inside** `~/macl/api` (so it finds `bcrypt`), then `pm2 restart macl-api`.
+- **"Out of host capacity" on create:** retry at a calm pace (≈ once a minute); rapid clicks trigger a
+  rate limit.
 - **"no such contract" errors:** the chain was reset without redeploying — run `npm run deploy:besu`
-  again and restart the API.
+  again and `pm2 restart macl-api`.

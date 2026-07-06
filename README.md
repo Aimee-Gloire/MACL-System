@@ -4,6 +4,8 @@ MACL is a permissioned-blockchain system that lets an NGO, a government M&E unit
 
 ## Quick links
 
+- **Demo video:** <https://drive.google.com/file/d/1KSa2JvIxu-KOBbV80jwDLvXvl9kl6w-r/view?usp=sharing>
+- **Live demo:** <http://145.241.184.66/> — the full system hosted on a cloud VM (3-node Besu chain + REST API + dashboard). Login password for each role (donor / ngo / audit) is `macl1234`.
 - **Run it locally:** [`RUN-BESU.md`](RUN-BESU.md) — full step-by-step
 - **Deploy it to a server:** [`DEPLOYMENT.md`](DEPLOYMENT.md) — free-tier cloud hosting, step-by-step
 - **Results, analysis & discussion:** [`RESULTS.md`](RESULTS.md) — RQ3 evaluation vs a centralised baseline
