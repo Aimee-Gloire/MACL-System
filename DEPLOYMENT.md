@@ -5,19 +5,20 @@ MACL runs as a live cloud deployment on an Oracle Cloud "Always Free" VM. The wh
 Section 1 covers that deployment. Section 2 documents a Cloudflare tunnel as a lighter alternative
 that needs no cloud account.
 
-How the pieces fit: one VM runs everything, with a small web server (Caddy) in front on port 80.
-Caddy serves the dashboard files and forwards anything under `/api` to the Node API. Because the
-dashboard and API share one address, the dashboard's automatic API selection (in
+The live system is at **https://macl-rwanda.duckdns.org**.
+
+How the pieces fit: one VM runs everything, with a small web server (Caddy) in front. Caddy serves
+the dashboard files, forwards anything under `/api` to the Node API, and terminates HTTPS. Because
+the dashboard and API share one address, the dashboard's automatic API selection (in
 `dashboard/config.js`) works with no editing.
 
 ```
-Browser ──HTTP──▶  Caddy (port 80)  ┬─ "/"      → dashboard files
-                                     └─ "/api/*" → Node API (127.0.0.1:3001) → 3 Besu nodes
+Browser ──HTTPS──▶  Caddy (port 443)  ┬─ "/"      → dashboard files
+                                       └─ "/api/*" → Node API (127.0.0.1:3001) → 3 Besu nodes
 ```
 
-The demo is served over HTTP at the VM's IP. The system uses only synthetic data (no personal data
-or real funds), so HTTPS is not required; adding a domain and HTTPS is an optional step at the end of
-Section 1.
+HTTPS is handled by Caddy, which obtains and renews a free Let's Encrypt certificate automatically
+for the domain (Part 11). The domain itself is a free DuckDNS subdomain pointed at the VM's IP.
 
 ---
 
@@ -142,11 +143,11 @@ const fs=require('fs'),crypto=require('crypto'),bcrypt=require('bcrypt');
 let env=fs.readFileSync('.env','utf8');
 const set=(k,v)=>{const re=new RegExp('^'+k+'=.*$','m');env=re.test(env)?env.replace(re,k+'='+v):env+'\n'+k+'='+v;};
 set('JWT_SECRET',crypto.randomBytes(32).toString('hex'));
-const pw='macl1234';
-for(const r of ['DONOR','NGO','AUDIT','ADMIN'])set(r+'_PW_HASH',bcrypt.hashSync(pw,10));
+const pws={DONOR:'<donor-pw>',NGO:'<ngo-pw>',AUDIT:'<audit-pw>',ADMIN:'<admin-pw>'}; // choose a DIFFERENT password per role
+for(const r of Object.keys(pws))set(r+'_PW_HASH',bcrypt.hashSync(pws[r],12));
 set('CORS_ORIGIN','http://YOUR_PUBLIC_IP');
 fs.writeFileSync('.env',env);
-console.log('ENV OK. Login password for all roles = '+pw);
+console.log('ENV OK. Per-role passwords hashed.');
 EOF
 node setup-env.js
 sudo npm install -g pm2
@@ -159,7 +160,28 @@ curl -s http://127.0.0.1:3001/api/health; echo    # expect {"ok":true, ...}
 return 503) and every other flow works. To enable file evidence, set `DATABASE_URL` to a Neon or
 Postgres connection string and run `npm run migrate`.
 
-## Part 9 — Put Caddy in front (serve dashboard + proxy /api on port 80)
+## Part 9 — Get a free domain and open port 443
+
+A certificate can't be issued for a bare IP, so the site needs a domain name. The live deployment
+uses a free DuckDNS subdomain.
+
+1. Go to <https://duckdns.org>, sign in, and add a subdomain (the live one is `macl-rwanda`, giving
+   `macl-rwanda.duckdns.org`).
+2. Set its **current ip** to the VM's public IP and click **update ip**.
+3. Open port 443 in the Oracle security list (as in Part 3, but Destination Port `443`), and on the
+   VM:
+
+   ```
+   sudo iptables -I INPUT 1 -p tcp --dport 443 -j ACCEPT
+   sudo netfilter-persistent save
+   ```
+
+Check DNS resolves before continuing: `dig +short macl-rwanda.duckdns.org` should print the VM's IP.
+
+## Part 10 — Put Caddy in front (dashboard + /api + automatic HTTPS)
+
+Naming a real domain in the Caddyfile is what triggers Caddy to fetch and auto-renew a free Let's
+Encrypt certificate. No certificate files to manage.
 
 ```
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
@@ -167,7 +189,7 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --d
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
 sudo apt update && sudo apt install -y caddy
 sudo tee /etc/caddy/Caddyfile > /dev/null <<'EOF'
-:80 {
+macl-rwanda.duckdns.org {
     handle /api/* {
         reverse_proxy 127.0.0.1:3001
     }
@@ -182,26 +204,31 @@ sudo chmod o+x /home/ubuntu
 sudo systemctl restart caddy
 ```
 
-## Part 10 — Verify it's live
+Then point the API's allowed origin at the domain:
 
-Open http://YOUR_PUBLIC_IP/ in a browser (the live server is http://145.241.184.66/). You get the
-sign-in page. Log in as donor, ngo, or audit with the password `macl1234`, and the connection light
-turns green. Trying it on a phone over mobile data confirms it is genuinely public.
+```
+cd ~/macl/api
+sed -i 's|^CORS_ORIGIN=.*|CORS_ORIGIN=https://macl-rwanda.duckdns.org|' .env
+pm2 restart macl-api
+```
+
+Leave port 80 open: the certificate challenge uses it, and Caddy redirects HTTP to HTTPS.
+
+## Part 11 — Verify it's live
+
+```
+curl -sI https://macl-rwanda.duckdns.org | head -3     # expect HTTP/2 200
+```
+
+Open <https://macl-rwanda.duckdns.org> in a browser. You get the sign-in page with a padlock. Log in
+as donor, ngo, or audit with that role's password, and the connection light turns green. Trying it on
+a phone over mobile data confirms it is genuinely public.
 
 Screenshot the live URL and the green connection light. That is the "deployed and verified in the
 target environment" evidence the rubric asks for.
 
-## Optional: a domain and HTTPS
-
-Point a domain (or a free DuckDNS subdomain) at the VM's IP, open port 443 (Part 3), then replace the
-Caddyfile's `:80` line with your domain name. Caddy fetches a free HTTPS certificate automatically:
-
-```
-your.domain {
-    handle /api/* { reverse_proxy 127.0.0.1:3001 }
-    handle { root * /home/ubuntu/macl/dashboard; file_server }
-}
-```
+If the certificate fails, `sudo journalctl -u caddy -n 30 --no-pager` says why; the usual causes are
+DNS not yet pointing at the VM, or port 80/443 still closed.
 
 Reload with `sudo systemctl reload caddy`, and set `CORS_ORIGIN=https://your.domain` in `api/.env`
 followed by `pm2 restart macl-api`.

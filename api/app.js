@@ -32,6 +32,7 @@ function createApp(opts = {}) {
   })();
 
   const app = express();
+  app.set("trust proxy", 1); // deployed behind a reverse proxy (Caddy); required for per-IP rate limiting
 
   // S5 / F-13: security headers. The strict CSP + nosniff matter most for the
   // document-download response (an evidence file must never render/run in our

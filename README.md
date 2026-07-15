@@ -9,7 +9,7 @@ the record. (BSc Software Engineering capstone.)
 ## Quick links
 
 - Demo video: <https://drive.google.com/file/d/1KSa2JvIxu-KOBbV80jwDLvXvl9kl6w-r/view?usp=sharing>
-- Live demo: <http://145.241.184.66/> — the full system hosted on a cloud VM (3-node Besu chain, REST API, dashboard). Login password for each role (donor / ngo / audit) is `macl1234`.
+- Live demo: <https://macl-rwanda.duckdns.org> — the full system hosted on a cloud VM (3-node Besu chain, REST API, dashboard), served over HTTPS. Each role (donor / ngo / audit) signs in with its own password, configured as a per-role bcrypt hash on the server.
 - Run it locally: [`RUN-BESU.md`](RUN-BESU.md)
 - Deploy it to a server: [`DEPLOYMENT.md`](DEPLOYMENT.md)
 - Results, analysis and discussion: [`RESULTS.md`](RESULTS.md)
