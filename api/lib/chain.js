@@ -153,6 +153,41 @@ function makeChain(cfg) {
     finally { inFlight.delete(key); }
   }
 
+  // Every event the read helpers scan. Kept here so the boot-time warm-up and the
+  // readers can never drift apart.
+  const CACHED_EVENTS = [
+    [() => read.agreement, "AgreementCreated"],
+    [() => read.agreement, "TargetAdded"],
+    [() => read.agreement, "TargetEdited"],
+    [() => read.agreement, "TargetRemoved"],
+    [() => read.agreement, "AgreementDatesUpdated"],
+    [() => read.agreement, "BudgetSet"],
+    [() => read.agreement, "AgreementFinalised"],
+    [() => read.compliance, "RecordSubmitted"],
+    [() => read.compliance, "SpendRequested"],
+  ];
+
+  // Prime the log cache at start-up.
+  //
+  // The first scan after a restart has to walk the chain from block 0, which on a
+  // long-lived network takes several seconds. Doing it here means the process
+  // absorbs that cost while it is booting, instead of the first person to open the
+  // dashboard waiting for it. Every later request is served from the cache and only
+  // scans the handful of blocks minted since.
+  //
+  // Deliberately best-effort and non-blocking: the API listens immediately and
+  // still works if this fails (the readers just fall back to scanning on demand),
+  // so a slow or briefly-unavailable Besu node can never stop the API from starting.
+  async function warmCache() {
+    const started = Date.now();
+    let ok = 0;
+    await Promise.all(CACHED_EVENTS.map(async ([contractOf, eventName]) => {
+      try { await queryLogs(contractOf(), eventName); ok++; }
+      catch (_) { /* leave it cold; the next reader will scan it */ }
+    }));
+    return { events: ok, total: CACHED_EVENTS.length, ms: Date.now() - started };
+  }
+
   // ------------------------------------------------------------------ READS
   async function getAgreements() {
     const logs = await queryLogs(read.agreement, "AgreementCreated");
@@ -535,7 +570,7 @@ function makeChain(cfg) {
   return {
     // reads
     getAgreements, getRecords, getSpend, orgOf, hasFailingRecords,
-    recentBlocks, agreementEvents, getNodeStates, getIntegrity, health,
+    recentBlocks, agreementEvents, getNodeStates, getIntegrity, health, warmCache,
     // writes
     createAgreement, addTarget, finaliseAgreement, setBudget, registerOrg,
     editTarget, removeTarget, updateDates,

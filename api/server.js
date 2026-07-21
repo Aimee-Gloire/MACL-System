@@ -7,7 +7,7 @@ const { rolesWithoutPasswordHash } = require("./lib/auth");
 
 // createApp() validates JWT_SECRET (fail-closed, F-01) — if it is missing or too
 // short this throws here and the process exits before listening, by design.
-const { app, cfg, docs } = createApp();
+const { app, cfg, chain, docs } = createApp();
 
 app.listen(cfg.port, () => {
   console.log(`MACL API listening on http://127.0.0.1:${cfg.port}`);
@@ -21,4 +21,11 @@ app.listen(cfg.port, () => {
     console.warn(`  WARNING   : no password hash set for: ${missing.join(", ")} — ${missing.length === 1 ? "that role" : "those roles"} cannot log in. ` +
       `Set ${missing.map((r) => r.toUpperCase() + "_PW_HASH").join(" / ")} in api/.env (generate with: node scripts/hash-password.js <password>).`);
   }
+
+  // Prime the event-log cache now, in the background. The API is already accepting
+  // requests, so this only ever makes the first page load faster — it never delays
+  // start-up, and a failure here is logged but not fatal.
+  chain.warmCache()
+    .then((r) => console.log(`  cache     : warmed ${r.events}/${r.total} event scans in ${r.ms} ms`))
+    .catch((err) => console.warn(`  cache     : warm-up skipped (${err.message})`));
 });
