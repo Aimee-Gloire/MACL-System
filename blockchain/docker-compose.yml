@@ -20,6 +20,9 @@ services:
       #    published port; LAN exposure is closed by binding that port to the host's
       #    loopback below (ports: "127.0.0.1:<host>:8545"), not by this flag.
       - --rpc-http-api=ETH,NET,QBFT,WEB3
+      # Allow a wide eth_getLogs span so the API can scan event history in a few
+      # calls instead of hundreds of 1000-block pages (default cap is 1000).
+      - --rpc-max-logs-range=200000
       - --host-allowlist=127.0.0.1,localhost
       - --rpc-http-cors-origins=http://127.0.0.1:3001
       - --rpc-http-host=0.0.0.0
@@ -51,6 +54,9 @@ services:
       #    published port; LAN exposure is closed by binding that port to the host's
       #    loopback below (ports: "127.0.0.1:<host>:8545"), not by this flag.
       - --rpc-http-api=ETH,NET,QBFT,WEB3
+      # Allow a wide eth_getLogs span so the API can scan event history in a few
+      # calls instead of hundreds of 1000-block pages (default cap is 1000).
+      - --rpc-max-logs-range=200000
       - --host-allowlist=127.0.0.1,localhost
       - --rpc-http-cors-origins=http://127.0.0.1:3001
       - --rpc-http-host=0.0.0.0
@@ -83,6 +89,9 @@ services:
       #    published port; LAN exposure is closed by binding that port to the host's
       #    loopback below (ports: "127.0.0.1:<host>:8545"), not by this flag.
       - --rpc-http-api=ETH,NET,QBFT,WEB3
+      # Allow a wide eth_getLogs span so the API can scan event history in a few
+      # calls instead of hundreds of 1000-block pages (default cap is 1000).
+      - --rpc-max-logs-range=200000
       - --host-allowlist=127.0.0.1,localhost
       - --rpc-http-cors-origins=http://127.0.0.1:3001
       - --rpc-http-host=0.0.0.0

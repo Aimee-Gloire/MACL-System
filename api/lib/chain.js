@@ -103,18 +103,54 @@ function makeChain(cfg) {
   }
 
   // Besu caps how many blocks one eth_getLogs may span (--rpc-max-logs-range,
-  // default ~1000). On a long-running chain "block 0 -> latest" exceeds that, so
-  // we page through the history in fixed windows and merge. Window is < the limit.
+  // default 1000). A scan wider than the cap is rejected, so we page the range in
+  // windows. Keep LOGS_WINDOW in step with that flag (blockchain/docker-compose.yml).
   const LOGS_WINDOW = Number(process.env.LOGS_WINDOW || 1000);
-  async function queryLogs(contract, eventName) {
-    const latest = await provider.getBlockNumber();
+
+  // Scan one block range for an event, paging in node-acceptable windows.
+  async function scanRange(contract, eventName, from, to) {
     const filter = contract.filters[eventName]();
     const out = [];
-    for (let from = 0; from <= latest; from += LOGS_WINDOW) {
-      const to = Math.min(from + LOGS_WINDOW - 1, latest);
-      out.push(...(await contract.queryFilter(filter, from, to)));
+    for (let f = from; f <= to; f += LOGS_WINDOW) {
+      const t = Math.min(f + LOGS_WINDOW - 1, to);
+      out.push(...(await contract.queryFilter(filter, f, t)));
     }
     return out;
+  }
+
+  // Incremental event-log cache.
+  //
+  // QBFT finalises each block as it is sealed and never reorganises, so once a
+  // block exists its logs can never change. That makes history safe to cache: we
+  // scan the chain once, remember how far we got, and afterwards only scan the
+  // blocks added since. Without this, every page load re-scanned the whole chain
+  // from block 0 — and because QBFT mints a block every 2 seconds whether or not
+  // anything happens, that cost grew with the network's uptime rather than with
+  // the amount of real activity.
+  const logCache = new Map(); // key -> { logs, scannedTo }
+  const inFlight = new Map(); // key -> Promise, so concurrent callers share one scan
+
+  async function queryLogs(contract, eventName) {
+    const key = `${contract.target}|${eventName}`;
+    if (inFlight.has(key)) return inFlight.get(key);
+
+    const run = (async () => {
+      const latest = await provider.getBlockNumber();
+      let hit = logCache.get(key);
+      // A head lower than we've already scanned means the chain was replaced (a
+      // fresh genesis / redeploy). Drop the stale cache and rescan from 0.
+      if (hit && latest < hit.scannedTo) { logCache.delete(key); hit = undefined; }
+      if (hit && hit.scannedTo === latest) return hit.logs.slice(); // nothing new
+      const from = hit ? hit.scannedTo + 1 : 0;
+      const fresh = await scanRange(contract, eventName, from, latest);
+      const logs = hit ? hit.logs.concat(fresh) : fresh;
+      logCache.set(key, { logs, scannedTo: latest });
+      return logs.slice(); // hand out a copy; the cache stays canonical
+    })();
+
+    inFlight.set(key, run);
+    try { return await run; }
+    finally { inFlight.delete(key); }
   }
 
   // ------------------------------------------------------------------ READS
