@@ -255,9 +255,12 @@ window.MACL = (function () {
   async function withTx(label, fn) {
     try {
       const tx = await fn();
-      toast(label, `tx ${shortAddr(tx.hash)} submitted…`, "info");
+      // Plain language for non-technical staff (proposal: no gas/keys/RPC jargon). We keep the
+      // block number — that's meaningful evidence and the proposal wants the ledger visible —
+      // but drop the transaction hash, which means nothing to an NGO/ministry user.
+      toast(label, "Recording on the ledger…", "info");
       const receipt = await tx.wait();
-      toast(`${label} ✓`, `mined in block #${receipt.blockNumber}`, "ok");
+      toast(`${label} ✓`, `Recorded in block #${receipt.blockNumber}`, "ok");
       return receipt;
     } catch (err) {
       toast(`${label} failed`, parseError(err), "err");

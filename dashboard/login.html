@@ -6,66 +6,132 @@
 <title>MACL — Sign in</title>
 <link href="favicon.svg" rel="icon" type="image/svg+xml"/>
 <script src="https://cdn.tailwindcss.com"></script>
-<style>
-  body { font-family: Inter, system-ui, sans-serif; }
-  .code { font-family: "JetBrains Mono", ui-monospace, monospace; }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#00322d",
+          "primary-container": "#004b44",
+          "on-primary-container": "#7ebab0",
+          "surface": "#f8faf8",
+          "surface-container-low": "#f2f4f2",
+          "surface-container-lowest": "#ffffff",
+          "on-surface": "#191c1b",
+          "on-surface-variant": "#3f4947",
+          "outline-variant": "#bfc9c6",
+          "secondary": "#515f74",
+          "accent": "#4ade80",
+          "error": "#ba1a1a"
+        },
+        fontFamily: {
+          sans: ["Inter", "system-ui", "sans-serif"],
+          mono: ["JetBrains Mono", "ui-monospace", "monospace"]
+        }
+      }
+    }
+  }
+</script>
 </head>
-<body class="min-h-screen bg-[#f3f5f4] flex items-center justify-center p-6">
-  <div class="w-full max-w-sm bg-white rounded-2xl shadow-lg border border-[#dfe4e2] p-8">
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold text-[#00322d]">MACL</h1>
-      <p class="text-sm text-[#3f4947] mt-1">Multi-Stakeholder Accountability &amp; Compliance Ledger</p>
+<body class="min-h-screen bg-surface text-on-surface font-sans antialiased">
+<div class="min-h-screen grid lg:grid-cols-[1.05fr_1fr]">
+
+  <!-- ============ Brand / context panel ============ -->
+  <aside class="relative bg-primary text-white px-8 py-10 lg:px-16 lg:py-14 flex flex-col justify-between overflow-hidden">
+    <!-- subtle brand watermark -->
+    <svg class="absolute -right-16 -bottom-16 w-80 h-80 opacity-[0.07] pointer-events-none select-none" viewBox="0 0 64 64" aria-hidden="true">
+      <g stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" fill="none">
+        <path d="M32 19 L18 45"/><path d="M32 19 L46 45"/><path d="M18 45 L46 45"/>
+      </g>
+      <g fill="#ffffff"><circle cx="32" cy="19" r="7.5"/><circle cx="18" cy="45" r="7.5"/><circle cx="46" cy="45" r="7.5"/></g>
+    </svg>
+
+    <!-- logo + wordmark -->
+    <div class="relative z-10 flex items-center gap-3">
+      <svg class="w-11 h-11 shrink-0" viewBox="0 0 64 64" role="img" aria-label="MACL">
+        <rect width="64" height="64" rx="14" fill="#004b44"/>
+        <g stroke="#4ade80" stroke-width="4.5" stroke-linecap="round" fill="none">
+          <path d="M32 19 L18 45"/><path d="M32 19 L46 45"/><path d="M18 45 L46 45"/>
+        </g>
+        <g fill="#ffffff"><circle cx="32" cy="19" r="7.5"/><circle cx="18" cy="45" r="7.5"/><circle cx="46" cy="45" r="7.5"/></g>
+      </svg>
+      <div>
+        <p class="text-lg font-bold leading-none tracking-tight">MACL</p>
+        <p class="text-[11px] text-on-primary-container mt-1">Multi-Stakeholder Accountability &amp; Compliance Ledger</p>
+      </div>
     </div>
 
-    <form id="loginForm" class="space-y-4">
-      <div>
-        <label class="block text-xs font-semibold uppercase tracking-wider text-[#515f74] mb-1">Organisation</label>
-        <select id="username" class="w-full border border-[#bfc9c6] rounded-lg p-3 text-sm bg-white">
-          <option value="donor">Donor</option>
-          <option value="ngo">NGO</option>
-          <option value="audit">Government / Audit</option>
-        </select>
-      </div>
-      <div>
-        <label class="block text-xs font-semibold uppercase tracking-wider text-[#515f74] mb-1">Password</label>
-        <div class="relative">
-          <input id="password" type="password" autocomplete="current-password"
-                 class="w-full border border-[#bfc9c6] rounded-lg p-3 pr-16 text-sm" placeholder="••••••••"/>
-          <button id="togglePassword" type="button" aria-label="Show password" aria-pressed="false"
-                  class="absolute inset-y-0 right-0 px-3 text-xs font-semibold uppercase tracking-wider text-[#515f74] hover:text-[#00322d]">
-            Show
-          </button>
-        </div>
-      </div>
-      <button id="loginBtn" type="submit"
-              class="w-full bg-[#00322d] text-white rounded-lg py-3 text-sm font-semibold hover:opacity-90 active:scale-[.99] transition">
-        Sign in
-      </button>
-      <p id="loginErr" class="text-xs text-[#ba1a1a] hidden"></p>
-    </form>
+    <!-- headline + trust points -->
+    <div class="relative z-10 my-10 lg:my-0 max-w-md">
+      <h1 class="text-3xl lg:text-[2.6rem] font-bold leading-[1.15] tracking-tight">
+        One shared record,<br/>verified by three organisations.
+      </h1>
+    </div>
 
-    <p class="text-[11px] text-[#515f74] mt-6 leading-relaxed">
-      Sign in with your organisation's account.
+    <p class="relative z-10 text-[11px] font-mono text-white/45">
+      Permissioned · Besu · 3-node QBFT
     </p>
-  </div>
+  </aside>
 
-  <script>
-    (function () {
-      var btn = document.getElementById('togglePassword');
-      var input = document.getElementById('password');
-      btn.addEventListener('click', function () {
-        var show = input.type === 'password';
-        input.type = show ? 'text' : 'password';
-        btn.textContent = show ? 'Hide' : 'Show';
-        btn.setAttribute('aria-pressed', String(show));
-        btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-        input.focus();
-      });
-    })();
-  </script>
-  <script src="config.js"></script>
-  <script src="js/chain.js"></script>
-  <script src="js/login.js"></script>
+  <!-- ============ Sign-in ============ -->
+  <main class="flex items-center justify-center px-6 py-14 lg:py-0">
+    <div class="w-full max-w-sm">
+      <div class="mb-8">
+        <h2 class="text-2xl font-bold text-primary tracking-tight">Sign in</h2>
+        <p class="text-sm text-on-surface-variant mt-1.5">Use your organisation's account.</p>
+      </div>
+
+      <form id="loginForm" class="space-y-5">
+        <div>
+          <label for="username" class="block text-[11px] font-semibold uppercase tracking-wider text-secondary mb-1.5">Organisation</label>
+          <select id="username"
+                  class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg p-3 pr-9 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition">
+            <option value="donor">Donor</option>
+            <option value="ngo">NGO</option>
+            <option value="audit">Government / Audit</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="password" class="block text-[11px] font-semibold uppercase tracking-wider text-secondary mb-1.5">Password</label>
+          <div class="relative">
+            <input id="password" type="password" autocomplete="current-password" placeholder="••••••••"
+                   class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg p-3 pr-16 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition"/>
+            <button id="togglePassword" type="button" aria-label="Show password" aria-pressed="false"
+                    class="absolute inset-y-0 right-0 px-3 text-[11px] font-semibold uppercase tracking-wider text-secondary hover:text-primary transition">
+              Show
+            </button>
+          </div>
+        </div>
+
+        <button id="loginBtn" type="submit"
+                class="w-full bg-primary text-white rounded-lg py-3.5 text-sm font-semibold hover:bg-primary-container active:scale-[.99] transition">
+          Sign in
+        </button>
+
+        <p id="loginErr" class="text-xs text-error hidden"></p>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var btn = document.getElementById('togglePassword');
+    var input = document.getElementById('password');
+    btn.addEventListener('click', function () {
+      var show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.textContent = show ? 'Hide' : 'Show';
+      btn.setAttribute('aria-pressed', String(show));
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      input.focus();
+    });
+  })();
+</script>
+<script src="config.js"></script>
+<script src="js/chain.js"></script>
+<script src="js/login.js"></script>
 </body>
 </html>
